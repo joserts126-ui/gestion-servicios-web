@@ -57,6 +57,12 @@ function Cotizaciones() {
   const [listaComentariosNuevos, setListaComentariosNuevos] = useState([])
   const [comentariosGuardados, setComentariosGuardados] = useState([]) 
 
+  // ================= NUEVOS ESTADOS: GASTOS, PLAZO Y ENTREGABLES =================
+  const [gastosGenerales, setGastosGenerales] = useState(0)
+  const [utilidades, setUtilidades] = useState(0)
+  const [plazoDias, setPlazoDias] = useState('')
+  const [entregables, setEntregables] = useState('')
+
   // ================= CARGA DE DATOS =================
   const cargarDatos = async () => {
     setCargando(true)
@@ -89,17 +95,19 @@ function Cotizaciones() {
   useEffect(() => { cargarDatos() }, [id])
 
   // ================= MATEMÁTICA Y TABLA =================
-  const calcularTotalGuardado = (detallesCotizacion) => {
-    if (!detallesCotizacion || detallesCotizacion.length === 0) return 0
-    let totalFinal = 0
-    detallesCotizacion.forEach(fila => {
+  const calcularTotalGuardado = (cot) => {
+    if (!cot.detallecotizacion || cot.detallecotizacion.length === 0) return 0
+    let totalFinalBase = 0
+    cot.detallecotizacion.forEach(fila => {
       const baseFila = fila.cantidad * fila.preciounitario
       const tipoImpuesto = catImpuestos.find(i => i.idimpuestos == fila.idimpuestos)?.impuesto
-      if (tipoImpuesto === 'Incluido IGV') totalFinal += baseFila
-      else if (tipoImpuesto === '+ IGV') totalFinal += (baseFila * 1.18)
-      else totalFinal += baseFila
+      if (tipoImpuesto === 'Incluido IGV') totalFinalBase += baseFila
+      else if (tipoImpuesto === '+ IGV') totalFinalBase += (baseFila * 1.18)
+      else totalFinalBase += baseFila
     })
-    return totalFinal
+    const gg = parseFloat(cot.gastos_generales || 0)
+    const ut = parseFloat(cot.utilidades || 0)
+    return totalFinalBase + ((gg + ut) * 1.18)
   }
 
   let cotizacionesFiltradas = listaCotizaciones.filter(cot => {
@@ -115,7 +123,7 @@ function Cotizaciones() {
     if (configOrden.clave === 'proveedor') { valA = a.proveedor?.razonsocial || a.ruc; valB = b.proveedor?.razonsocial || b.ruc } 
     else if (configOrden.clave === 'moneda') { valA = a.moneda?.moneda || ''; valB = b.moneda?.moneda || '' }
     else if (configOrden.clave === 'usuario') { valA = a.usuario?.nombre || ''; valB = b.usuario?.nombre || '' }
-    else if (configOrden.clave === 'total') { valA = calcularTotalGuardado(a.detallecotizacion); valB = calcularTotalGuardado(b.detallecotizacion) }
+    else if (configOrden.clave === 'total') { valA = calcularTotalGuardado(a); valB = calcularTotalGuardado(b) }
     if (valA < valB) return configOrden.direccion === 'asc' ? -1 : 1
     if (valA > valB) return configOrden.direccion === 'asc' ? 1 : -1
     return 0
@@ -133,6 +141,7 @@ function Cotizaciones() {
   const abrirModalNuevo = () => {
     setModoEdicion(false); setIdCotizacionActual(null); setRucProveedor(''); setIdFormaPago(''); setIdMoneda(''); setEstadoCotizacion('Solicitada')
     setFechaRecepcion(getFechaHoy()); setFechaAceptacion(''); setFechaInicio(''); setFechaFin('')
+    setGastosGenerales(0); setUtilidades(0); setPlazoDias(''); setEntregables('');
     setDetalles([{ item: '', cantidad: 1, idUnidad: defUnidadId, precioUnitario: 0, idImpuestos: defImpuestoId }])
     setComentarioTexto(''); setListaComentariosNuevos([]); setComentariosGuardados([]); setArchivoUrl(''); setArchivoDesc(''); setArchivosGuardados([])
     setMostrarModal(true)
@@ -142,6 +151,7 @@ function Cotizaciones() {
     setModoEdicion(true); setIdCotizacionActual(cot.idcotizacion)
     setRucProveedor(cot.ruc || ''); setIdFormaPago(cot.idformapago || ''); setIdMoneda(cot.idmoneda || ''); setEstadoCotizacion(cot.estado || 'Solicitada')
     setFechaRecepcion(cot.fecharecepcion || ''); setFechaAceptacion(cot.fechaaceptacion || ''); setFechaInicio(cot.fechainicio || ''); setFechaFin(cot.fechafin || '')
+    setGastosGenerales(cot.gastos_generales || 0); setUtilidades(cot.utilidades || 0); setPlazoDias(cot.plazo_dias || ''); setEntregables(cot.entregables || '');
 
     const { data: dataDetalles } = await supabase.from('detallecotizacion').select('*').eq('idcotizacion', cot.idcotizacion)
     setDetalles(dataDetalles?.length > 0 ? dataDetalles.map(d => ({ item: d.item, cantidad: d.cantidad, idUnidad: d.idunidad, precioUnitario: d.preciounitario, idImpuestos: d.idimpuestos })) : [])
@@ -160,15 +170,26 @@ function Cotizaciones() {
   const eliminarFila = (index) => { if(detalles.length > 1) setDetalles(detalles.filter((_, i) => i !== index)) }
   
   const calcularTotalesContables = () => {
-    let subtotalNeto = 0, igvTotal = 0, totalFinal = 0
+    let costoDirecto = 0, subtotalParcial = 0, igvBase = 0, totalFinalBase = 0
     detalles.forEach(fila => {
       const baseFila = fila.cantidad * fila.precioUnitario
       const tipoImpuesto = catImpuestos.find(i => i.idimpuestos == fila.idImpuestos)?.impuesto
-      if (tipoImpuesto === 'Incluido IGV') { totalFinal += baseFila; subtotalNeto += (baseFila / 1.18); igvTotal += baseFila - (baseFila / 1.18) } 
-      else if (tipoImpuesto === '+ IGV') { subtotalNeto += baseFila; igvTotal += (baseFila * 0.18); totalFinal += (baseFila * 1.18) } 
-      else { subtotalNeto += baseFila; totalFinal += baseFila }
+      if (tipoImpuesto === 'Incluido IGV') { costoDirecto += (baseFila / 1.18); igvBase += baseFila - (baseFila / 1.18); totalFinalBase += baseFila } 
+      else if (tipoImpuesto === '+ IGV') { costoDirecto += baseFila; igvBase += (baseFila * 0.18); totalFinalBase += (baseFila * 1.18) } 
+      else { costoDirecto += baseFila; totalFinalBase += baseFila }
     })
-    return { subtotal: subtotalNeto, igv: igvTotal, total: totalFinal }
+
+    const gg = parseFloat(gastosGenerales || 0);
+    const ut = parseFloat(utilidades || 0);
+    const subtotalFinal = costoDirecto + gg + ut;
+    const igvAdicional = (gg + ut) * 0.18;
+
+    return { 
+      costoDirecto: costoDirecto, 
+      subtotal: subtotalFinal, 
+      igv: igvBase + igvAdicional, 
+      total: totalFinalBase + gg + ut + igvAdicional 
+    }
   }
   const totales = calcularTotalesContables()
 
@@ -189,18 +210,21 @@ function Cotizaciones() {
     setGuardando(true)
     try {
       let idCotizacionFinal = idCotizacionActual
+      
+      const payloadCabecera = {
+        ruc: rucProveedor, idformapago: idFormaPago, idmoneda: idMoneda, estado: estadoCotizacion,
+        fecharecepcion: fechaRecepcion || null, fechaaceptacion: fechaAceptacion || null, fechainicio: fechaInicio || null, fechafin: fechaFin || null,
+        gastos_generales: gastosGenerales, utilidades: utilidades, plazo_dias: plazoDias, entregables: entregables
+      }
+
       if (modoEdicion) {
-        const { error: errUpdate } = await supabase.from('cotizaciones').update({
-          ruc: rucProveedor, idformapago: idFormaPago, idmoneda: idMoneda, estado: estadoCotizacion,
-          fecharecepcion: fechaRecepcion || null, fechaaceptacion: fechaAceptacion || null, fechainicio: fechaInicio || null, fechafin: fechaFin || null
-        }).eq('idcotizacion', idCotizacionFinal)
+        const { error: errUpdate } = await supabase.from('cotizaciones').update(payloadCabecera).eq('idcotizacion', idCotizacionFinal)
         if (errUpdate) throw errUpdate
         await supabase.from('detallecotizacion').delete().eq('idcotizacion', idCotizacionFinal)
       } else {
-        const { data: nuevaCotizacion, error: errCotizacion } = await supabase.from('cotizaciones').insert([{
-          idservicio: id, ruc: rucProveedor, idformapago: idFormaPago, idmoneda: idMoneda, estado: 'Solicitada',
-          idusuario: idUsuarioActual || null, fecharecepcion: fechaRecepcion || null, fechaaceptacion: fechaAceptacion || null, fechainicio: fechaInicio || null, fechafin: fechaFin || null
-        }]).select()
+        payloadCabecera.idservicio = id
+        payloadCabecera.idusuario = idUsuarioActual || null
+        const { data: nuevaCotizacion, error: errCotizacion } = await supabase.from('cotizaciones').insert([payloadCabecera]).select()
         if (errCotizacion) throw errCotizacion
         idCotizacionFinal = nuevaCotizacion[0].idcotizacion
       }
@@ -229,18 +253,17 @@ function Cotizaciones() {
 
   // ================= NUEVO SISTEMA DE DISEÑO (VARIABLES CSS) =================
   const theme = {
-    bgApp: '#F8FAFC', // Gris muy claro de fondo general
+    bgApp: '#F8FAFC', 
     bgCard: '#FFFFFF',
-    textMain: '#1E293B', // Texto principal (casi negro pero suave)
-    textMuted: '#64748B', // Texto secundario
+    textMain: '#1E293B', 
+    textMuted: '#64748B', 
     border: '#E2E8F0',
-    primary: '#2563EB', // Azul corporativo moderno
-    success: '#16A34A', // Verde exito
-    inputBg: '#FFFFFF', // Sobreescribimos el fondo oscuro
+    primary: '#2563EB', 
+    success: '#16A34A', 
+    inputBg: '#FFFFFF', 
     danger: '#DC2626'
   }
 
-  // Estilos limpios y estandarizados
   const inputStyle = { 
     width: '100%', padding: '10px 12px', borderRadius: '6px', border: `1px solid ${theme.border}`, 
     backgroundColor: theme.inputBg, color: theme.textMain, fontSize: '14px', outline: 'none', 
@@ -256,7 +279,7 @@ function Cotizaciones() {
       case 'Aprobada': return { bg: '#DCFCE7', text: '#166534' }
       case 'Rechazada': return { bg: '#FEE2E2', text: '#991B1B' }
       case 'De Baja': return { bg: '#F1F5F9', text: '#475569' }
-      default: return { bg: '#DBEAFE', text: '#1E40AF' } // Solicitada
+      default: return { bg: '#DBEAFE', text: '#1E40AF' } 
     }
   }
 
@@ -273,7 +296,6 @@ function Cotizaciones() {
         </div>
       </div>
 
-      {/* CONTENEDOR EXPANDIDO A 95% o 1600px */}
       <div style={{ maxWidth: '1600px', width: '95%', margin: '0 auto' }}>
         
         {/* ENCABEZADO Y BUSCADOR */}
@@ -285,7 +307,6 @@ function Cotizaciones() {
             <h2 style={{ margin: '0 0 4px 0', color: theme.textMain, fontSize: '24px', fontWeight: '700' }}>Cotizaciones del Servicio #{id}</h2>
             <p style={{ margin: '0 0 20px 0', color: theme.textMuted, fontSize: '15px' }}>{cargando ? 'Cargando detalle...' : servicioActual}</p>
             
-            {/* Buscador más claro y sutil */}
             <input 
               type="text" 
               placeholder="🔍 Buscar por proveedor, estado, moneda o creador..." 
@@ -294,9 +315,14 @@ function Cotizaciones() {
               style={{ padding: '12px 16px', width: '450px', borderRadius: '8px', border: `1px solid ${theme.border}`, outline: 'none', backgroundColor: theme.bgCard, color: theme.textMain, fontSize: '14px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
             />
           </div>
-          <button onClick={abrirModalNuevo} style={{ padding: '12px 24px', backgroundColor: theme.primary, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '14px', boxShadow: '0 4px 6px rgba(37,99,235,0.2)', transition: '0.2s' }}>
-            + Nueva Cotización
-          </button>
+          <div style={{ display: 'flex', gap: '12px' }}>
+             <button onClick={() => navigate('/servicios')} style={{ padding: '12px 24px', backgroundColor: '#F8FAFC', color: theme.textMain, border: `1px solid ${theme.border}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '700', fontSize: '14px' }}>
+               📊 Ir a Matriz de Evaluación
+             </button>
+             <button onClick={abrirModalNuevo} style={{ padding: '12px 24px', backgroundColor: theme.primary, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '14px', boxShadow: '0 4px 6px rgba(37,99,235,0.2)', transition: '0.2s' }}>
+               + Nueva Cotización
+             </button>
+          </div>
         </div>
 
         {/* TABLA PRINCIPAL CLEAN */}
@@ -329,7 +355,7 @@ function Cotizaciones() {
                         <td style={{ ...tdStyle, fontWeight: '500' }}>{cot.proveedor ? cot.proveedor.razonsocial : cot.ruc}</td>
                         <td style={{ ...tdStyle, color: theme.textMuted }}>{cot.usuario ? cot.usuario.nombre : 'Sistema'}</td>
                         <td style={{ ...tdStyle, textAlign: 'right', fontWeight: '700', fontSize: '15px' }}>
-                          {cot.moneda?.moneda.includes('USD') ? '$' : 'S/'} {calcularTotalGuardado(cot.detallecotizacion).toFixed(2)}
+                          {cot.moneda?.moneda.includes('USD') ? '$' : 'S/'} {calcularTotalGuardado(cot).toFixed(2)}
                         </td>
                         <td style={{ ...tdStyle, textAlign: 'center' }}>
                           <span style={{ padding: '6px 12px', backgroundColor: statusStyle.bg, color: statusStyle.text, borderRadius: '20px', fontSize: '12px', fontWeight: '700' }}>
@@ -355,7 +381,6 @@ function Cotizaciones() {
           <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(15, 23, 42, 0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
             <div style={{ backgroundColor: theme.bgApp, padding: '0', borderRadius: '16px', width: '95%', maxWidth: '1200px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
               
-              {/* Header Modal Fijo */}
               <div style={{ position: 'sticky', top: 0, backgroundColor: theme.bgCard, zIndex: 10, padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${theme.border}` }}>
                 <h3 style={{ margin: 0, color: theme.textMain, fontSize: '20px', fontWeight: '700' }}>
                   {modoEdicion ? `Gestión de Cotización #${idCotizacionActual}` : 'Nueva Cotización'}
@@ -408,14 +433,18 @@ function Cotizaciones() {
                   </div>
 
                   <div style={cardStyle}>
-                    <h4 style={{ margin: '0 0 20px 0', color: theme.textMain, fontSize: '16px', borderBottom: `1px solid ${theme.border}`, paddingBottom: '12px' }}>2. Cronograma</h4>
+                    <h4 style={{ margin: '0 0 20px 0', color: theme.textMain, fontSize: '16px', borderBottom: `1px solid ${theme.border}`, paddingBottom: '12px' }}>2. Cronograma y Alcance</h4>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                       <div><label style={labelStyle}>Recepción de Doc.</label><input type="date" required value={fechaRecepcion} onChange={(e) => setFechaRecepcion(e.target.value)} style={inputStyle} /></div>
                       <div><label style={labelStyle}>Aceptación (Aprobación)</label><input type="date" value={fechaAceptacion} onChange={(e) => setFechaAceptacion(e.target.value)} style={inputStyle} /></div>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                       <div><label style={labelStyle}>Inicio de Servicio</label><input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} style={inputStyle} /></div>
                       <div><label style={labelStyle}>Fin Estimado</label><input type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} style={inputStyle} /></div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                      <div><label style={labelStyle}>Plazo Propuesto</label><input type="text" placeholder="Ej: 7 días calendario" value={plazoDias} onChange={(e) => setPlazoDias(e.target.value)} style={inputStyle} /></div>
+                      <div><label style={labelStyle}>Entregables / Alcance</label><input type="text" placeholder="Ej: Certificado e informe técnico" value={entregables} onChange={(e) => setEntregables(e.target.value)} style={inputStyle} /></div>
                     </div>
                   </div>
                 </div>
@@ -448,10 +477,29 @@ function Cotizaciones() {
                     ))}
                   </div>
                   
-                  {/* Totales Resaltados */}
+                  {/* Totales Resaltados (Incluyendo GG y Utilidades) */}
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginTop: '32px', paddingTop: '24px', borderTop: `1px dashed ${theme.border}` }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '150px 150px', gap: '16px', textAlign: 'right', fontSize: '14px', color: theme.textMuted, marginBottom: '8px' }}><div>Subtotal Grabado:</div><div style={{color: theme.textMain, fontWeight: '600'}}>{totales.subtotal.toFixed(2)}</div></div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '150px 150px', gap: '16px', textAlign: 'right', fontSize: '14px', color: theme.textMuted, marginBottom: '16px' }}><div>IGV (18%):</div><div style={{color: theme.textMain, fontWeight: '600'}}>{totales.igv.toFixed(2)}</div></div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '180px 150px', gap: '16px', textAlign: 'right', fontSize: '14px', marginBottom: '8px' }}>
+                      <div style={{ color: theme.textMuted, fontWeight: '600' }}>Costo Directo Neto:</div>
+                      <div style={{ color: theme.textMain, fontWeight: '700' }}>{totales.costoDirecto.toFixed(2)}</div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '180px 150px', gap: '16px', textAlign: 'right', fontSize: '14px', marginBottom: '8px', alignItems: 'center' }}>
+                      <div style={{ color: theme.textMuted }}>+ Gastos Generales:</div>
+                      <input type="number" min="0" step="0.01" value={gastosGenerales} onChange={(e) => setGastosGenerales(parseFloat(e.target.value) || 0)} style={{...inputStyle, padding: '4px 8px', textAlign: 'right'}} />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '180px 150px', gap: '16px', textAlign: 'right', fontSize: '14px', marginBottom: '16px', alignItems: 'center' }}>
+                      <div style={{ color: theme.textMuted }}>+ Utilidades:</div>
+                      <input type="number" min="0" step="0.01" value={utilidades} onChange={(e) => setUtilidades(parseFloat(e.target.value) || 0)} style={{...inputStyle, padding: '4px 8px', textAlign: 'right'}} />
+                    </div>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: '180px 150px', gap: '16px', textAlign: 'right', fontSize: '15px', marginBottom: '8px', borderTop: `1px solid ${theme.border}`, paddingTop: '8px' }}>
+                      <div style={{ color: theme.textMain, fontWeight: '700' }}>SUB-TOTAL:</div>
+                      <div style={{ color: theme.textMain, fontWeight: '800' }}>{totales.subtotal.toFixed(2)}</div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '180px 150px', gap: '16px', textAlign: 'right', fontSize: '14px', marginBottom: '16px', color: theme.textMuted }}>
+                      <div>IGV (18%):</div><div>{totales.igv.toFixed(2)}</div>
+                    </div>
+
                     <div style={{ display: 'grid', gridTemplateColumns: '150px 150px', gap: '16px', textAlign: 'right', fontSize: '20px', fontWeight: '800', color: theme.success, backgroundColor: '#F0FDF4', padding: '16px', borderRadius: '8px' }}>
                       <div>TOTAL FINAL:</div><div>{totales.total.toFixed(2)}</div>
                     </div>
