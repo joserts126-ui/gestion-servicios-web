@@ -143,10 +143,13 @@ function Servicios() {
   
   const getBadgeColor = (estado) => {
     switch(estado) {
-      case 'Terminado': return { bg: '#DCFCE7', text: '#166534' }
-      case 'En Proceso': return { bg: '#FEF9C3', text: '#854D0E' }
-      case 'Cancelado': return { bg: '#FEE2E2', text: '#991B1B' }
-      default: return { bg: '#DBEAFE', text: '#1E40AF' } // Pendiente
+      case '8. COMPLETADO': return { bg: '#DCFCE7', text: '#166534' } // Verde
+      case '6. EN EJECUCIÓN': return { bg: '#FEF9C3', text: '#854D0E' } // Amarillo
+      case 'CANCELADO': 
+      case 'REQUERIMIENTO CANCELADO': return { bg: '#FEE2E2', text: '#991B1B' } // Rojo/Peligro
+      case '2. COTIZACIÓN': return { bg: '#FEF08A', text: '#713F12' } // Amarillo claro
+      case '2.1 REQUERIMIENTO EN ESPERA DE APROBACION': return { bg: '#FFEDD5', text: '#9A3412' } // Naranja
+      default: return { bg: '#DBEAFE', text: '#1E40AF' } // EN ESPERA (Azul)
     }
   }
 
@@ -264,7 +267,13 @@ function Servicios() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   {modoEdicion && (
                     <select value={estadoServicio} onChange={(e) => setEstadoServicio(e.target.value)} style={{ padding: '8px 16px', borderRadius: '8px', border: `1px solid ${theme.border}`, fontWeight: '700', backgroundColor: theme.inputBg, color: theme.textMain }}>
-                      <option value="Pendiente">Pendiente</option><option value="En Proceso">En Proceso</option><option value="Terminado">Terminado</option><option value="Cancelado">Cancelado</option>
+                      <option value="EN ESPERA">EN ESPERA</option>
+                      <option value="2. COTIZACIÓN">2. COTIZACIÓN</option>
+                      <option value="2.1 REQUERIMIENTO EN ESPERA DE APROBACION">2.1 REQUERIMIENTO EN ESPERA DE APROBACION</option>
+                      <option value="6. EN EJECUCIÓN">6. EN EJECUCIÓN</option>
+                      <option value="8. COMPLETADO">8. COMPLETADO</option>
+                      <option value="CANCELADO">CANCELADO</option>
+                      <option value="REQUERIMIENTO CANCELADO">REQUERIMIENTO CANCELADO</option>
                     </select>
                   )}
                   <button onClick={() => setMostrarModal(false)} style={{ background: 'none', border: 'none', fontSize: '24px', color: theme.textMuted, cursor: 'pointer' }}>×</button>
