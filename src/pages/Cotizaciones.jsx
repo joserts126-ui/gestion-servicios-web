@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
+import TopBar from '../components/TopBar'
 
 function Cotizaciones() {
   const { id } = useParams() 
@@ -286,15 +287,8 @@ function Cotizaciones() {
   return (
     <div style={{ backgroundColor: theme.bgApp, minHeight: '100vh', paddingBottom: '40px', fontFamily: "'Inter', 'Segoe UI', sans-serif" }}>
       
-      {/* TOP BAR MODERNA */}
-      <div style={{ backgroundColor: theme.bgCard, borderBottom: `1px solid ${theme.border}`, padding: '12px 40px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: '30px', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: theme.textMain, fontWeight: '600' }}>
-          <span>{nombreUsuarioActual}</span>
-          <div style={{ width: '40px', height: '40px', backgroundColor: '#EFF6FF', color: theme.primary, borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '18px', fontWeight: 'bold' }}>
-            {nombreUsuarioActual.charAt(0)}
-          </div>
-        </div>
-      </div>
+      {/* AQUÍ INVOCAMOS AL COMPONENTE Y LE PASAMOS EL NOMBRE */}
+      <TopBar nombreUsuario={nombreUsuarioActual} />
 
       <div style={{ maxWidth: '1600px', width: '95%', margin: '0 auto' }}>
         
