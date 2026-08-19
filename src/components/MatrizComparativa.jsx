@@ -21,7 +21,7 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
         <div style={{ width: '100%', textAlign: 'center', position: 'relative' }}>
           <h1 style={{ margin: '0 0 15px 0', fontSize: '16px', fontWeight: 'bold', textDecoration: 'underline' }}>COMPARATIVO DE PROPUESTAS</h1>
           <div style={{ position: 'absolute', top: 0, right: 0, width: '180px', height: '45px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
-            <img src="../public/logoCentenario.png" alt="Logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+            <img src="/logoCentenario.png" alt="Logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
           </div>
           <table style={{ width: '45%', fontSize: '10.5px', textAlign: 'left', marginBottom: '10px' }}>
             <tbody>
