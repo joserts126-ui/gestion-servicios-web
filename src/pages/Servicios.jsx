@@ -8,7 +8,6 @@ import ServicioModal from '../components/ServicioModal'
 function Servicios() {
   const navigate = useNavigate()
   
-  // Estados de datos y catálogos
   const [listaServicios, setListaServicios] = useState([])
   const [lugares, setLugares] = useState([])
   const [tiposInfraestructura, setTiposInfraestructura] = useState([]) 
@@ -19,7 +18,6 @@ function Servicios() {
   const [cargando, setCargando] = useState(true)
   const [idUsuarioActual, setIdUsuarioActual] = useState('')
 
-  // Multi-Filtros y Búsqueda
   const [busqueda, setBusqueda] = useState('')
   const [filtroEstado, setFiltroEstado] = useState([])
   const [filtroPrioridad, setFiltroPrioridad] = useState([])
@@ -29,25 +27,25 @@ function Servicios() {
   const [mostrarMenuPrioridad, setMostrarMenuPrioridad] = useState(false)
   const [mostrarMenuLugar, setMostrarMenuLugar] = useState(false)
 
-  // Ordenamiento y Paginación
-  const [sortConfig, setSortConfig] = useState({ key: 'idservicio', direction: 'desc' })
+  // ===== MOTOR DE ORDENAMIENTO MULTINIVEL =====
+  const [sortConfig, setSortConfig] = useState([{ key: 'idservicio', direction: 'desc' }])
+  const [mostrarTooltipOrden, setMostrarTooltipOrden] = useState(false)
+
   const [paginaActual, setPaginaActual] = useState(1)
   const [registrosPorPagina, setRegistrosPorPagina] = useState(50)
 
-  // Interfaz de Tabla
   const [filasExpandidas, setFilasExpandidas] = useState([])
   const [menuAccionesFila, setMenuAccionesFila] = useState(null)
   const [mostrarMenuColumnas, setMostrarMenuColumnas] = useState(false)
   
   const [columnas, setColumnas] = useState({
     id: true, prioridad: true, fechaCreacion: true, servicio: true, lugar: true,
-    proveedor: true, responsable: false, docs: true, fechasNuevas: false, progreso: true, estado: true
+    proveedor: true, monto: true, responsable: false, docs: true, fechasNuevas: false, progreso: true, estado: true
   })
 
-  // ===== MOTOR DE ANCHO DE COLUMNAS =====
   const [colWidths, setColWidths] = useState({
     expand: 40, id: 70, prioridad: 80, fechaCreacion: 90, servicio: 260, lugar: 100,
-    proveedor: 160, responsable: 100, docs: 110, fechasNuevas: 90, progreso: 120, estado: 140, acciones: 50
+    proveedor: 160, monto: 110, responsable: 100, docs: 110, fechasNuevas: 90, progreso: 120, estado: 140, acciones: 50
   })
 
   const startResize = (e, colKey) => {
@@ -71,11 +69,9 @@ function Servicios() {
     document.body.style.cursor = 'col-resize'
   }
 
-  // Modales
   const [mostrarModalPrincipal, setMostrarModalPrincipal] = useState(false)
   const [modoEdicion, setModoEdicion] = useState(false)
   const [servicioSeleccionado, setServicioSeleccionado] = useState(null)
-  
   const [mostrarModalHomologacion, setMostrarModalHomologacion] = useState(false)
   const [servicioHomologacion, setServicioHomologacion] = useState(null)
 
@@ -135,11 +131,28 @@ function Servicios() {
     setMostrarMenuLugar(false)
   }
 
+  // ===== NUEVO: Handle Sort Acumulativo e Intuitivo =====
   const handleSort = (key) => {
-    setSortConfig(prev => ({
-      key,
-      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
-    }))
+    setSortConfig(prev => {
+      const existingIndex = prev.findIndex(item => item.key === key);
+
+      if (existingIndex >= 0) {
+        const currentDir = prev[existingIndex].direction;
+        if (currentDir === 'asc') {
+          // Si estaba ascendente, cambia a descendente
+          const newSort = [...prev];
+          newSort[existingIndex].direction = 'desc';
+          return newSort;
+        } else {
+          // Si estaba descendente (Tercer Clic), se quita del ordenamiento
+          const newSort = prev.filter((_, i) => i !== existingIndex);
+          return newSort.length > 0 ? newSort : [{ key: 'idservicio', direction: 'desc' }]; // Evita que se quede vacío
+        }
+      } else {
+        // Agrega la nueva columna AL FINAL de la jerarquía
+        return [...prev, { key, direction: 'asc' }];
+      }
+    })
   }
   
   const handleCheckboxChange = (valor, filtroActual, setFiltro) => setFiltro(filtroActual.includes(valor) ? filtroActual.filter(item => item !== valor) : [...filtroActual, valor])
@@ -163,8 +176,12 @@ function Servicios() {
     return totalFinal + adicionales
   }
 
-  // ===== LÓGICA DE FILTROS INTELIGENTES =====
-  // Evalúa si un servicio pasa los filtros actuales, ignorando uno específico (para calcular opciones disponibles)
+  const getMontoAprobado = (srv) => {
+    const cotAprobada = srv.cotizaciones?.find(c => c.estado?.toUpperCase() === 'APROBADA')
+    if (!cotAprobada) return null
+    return calcularTotalCotizacion(cotAprobada)
+  }
+
   const pasaFiltros = (srv, filtroIgnorado) => {
     if (busqueda && !(srv.servicio?.toLowerCase() || '').includes(busqueda.toLowerCase()) && !(srv.lugarejecucion?.lugarejecucion || '').toLowerCase().includes(busqueda.toLowerCase()) && !(srv.orden_compra || '').toLowerCase().includes(busqueda.toLowerCase()) && !(srv.num_requerimiento || '').toLowerCase().includes(busqueda.toLowerCase()) && !srv.estado.toLowerCase().includes(busqueda.toLowerCase()) && !srv.idservicio.toString().includes(busqueda.toLowerCase()) && !(srv.responsable || '').toLowerCase().includes(busqueda.toLowerCase())) return false;
     if (filtroIgnorado !== 'estado' && filtroEstado.length > 0 && !filtroEstado.includes(srv.estado)) return false;
@@ -173,42 +190,64 @@ function Servicios() {
     return true;
   }
 
-  // Listas Dinámicas
   const estadosDisponibles = [...new Set(listaServicios.filter(s => pasaFiltros(s, 'estado')).map(s => s.estado))].filter(Boolean)
   const prioridadesDisponibles = [...new Set(listaServicios.filter(s => pasaFiltros(s, 'prioridad')).map(s => s.prioridad))].filter(Boolean)
   const lugaresIdsDisponibles = [...new Set(listaServicios.filter(s => pasaFiltros(s, 'lugar')).map(s => s.idlugar?.toString()))].filter(Boolean)
   const lugaresDisponibles = lugares.filter(l => lugaresIdsDisponibles.includes(l.idlugar.toString()))
 
-  // Datos finales a mostrar en tabla
-  let datosProcesados = listaServicios.filter(s => pasaFiltros(s, null))
+  // PRE-CÁLCULO PARA MEJORAR EL RENDIMIENTO EXTREMAMENTE
+  let datosProcesados = listaServicios.filter(s => pasaFiltros(s, null)).map(srv => ({
+    ...srv,
+    montoAprobado: getMontoAprobado(srv)
+  }))
 
+  // ===== ORDENAMIENTO ESTRICTO MATEMÁTICO =====
   datosProcesados.sort((a, b) => {
-    const getVal = (obj, key) => {
-      if (key === 'lugar') return obj.lugarejecucion?.lugarejecucion || ''
-      if (key === 'sistema') return obj.sistema?.sistema || obj.tipoinfraestructura?.tipoinfraestructura || ''
-      return obj[key]
+    for (let i = 0; i < sortConfig.length; i++) {
+      const { key, direction } = sortConfig[i];
+      
+      const getVal = (obj, k) => {
+        if (k === 'lugar') return obj.lugarejecucion?.lugarejecucion || ''
+        if (k === 'sistema') return obj.sistema?.sistema || obj.tipoinfraestructura?.tipoinfraestructura || ''
+        if (k === 'monto') return obj.montoAprobado || 0 
+        return obj[k]
+      }
+      
+      let valA = getVal(a, key)
+      let valB = getVal(b, key)
+
+      if (valA === null || valA === undefined) valA = ''
+      if (valB === null || valB === undefined) valB = ''
+      
+      // Asegurar que Monto, ID y Progreso se ordenen matemáticamente (no por texto)
+      if (key === 'idservicio' || key === 'progreso' || key === 'monto') {
+        valA = Number(valA) || 0;
+        valB = Number(valB) || 0;
+      } else {
+        if (typeof valA === 'string') valA = valA.toLowerCase()
+        if (typeof valB === 'string') valB = valB.toLowerCase()
+      }
+
+      if (valA < valB) return direction === 'asc' ? -1 : 1
+      if (valA > valB) return direction === 'asc' ? 1 : -1
+      // Si son iguales, el bucle for avanza a la siguiente jerarquía de ordenamiento
     }
-    let valA = getVal(a, sortConfig.key)
-    let valB = getVal(b, sortConfig.key)
-
-    if (valA === null || valA === undefined) valA = ''
-    if (valB === null || valB === undefined) valB = ''
-    
-    if (typeof valA === 'string') valA = valA.toLowerCase()
-    if (typeof valB === 'string') valB = valB.toLowerCase()
-
-    if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1
-    if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1
-    return 0
+    return 0 
   })
 
   const totalPaginas = Math.ceil(datosProcesados.length / registrosPorPagina) || 1
   const indiceUltimoRegistro = paginaActual * registrosPorPagina
   const datosPaginados = datosProcesados.slice(indiceUltimoRegistro - registrosPorPagina, indiceUltimoRegistro)
 
+  // Indicador Visual de Jerarquía Dinámico
   const renderSortIcon = (key) => {
-    if (sortConfig.key !== key) return <span style={{ color: '#CBD5E1', marginLeft: '4px' }}>↕</span>
-    return sortConfig.direction === 'asc' ? <span style={{ color: theme.primary, marginLeft: '4px' }}>↑</span> : <span style={{ color: theme.primary, marginLeft: '4px' }}>↓</span>
+    const index = sortConfig.findIndex(s => s.key === key);
+    if (index === -1) return <span style={{ color: '#CBD5E1', marginLeft: '4px' }}>↕</span>;
+    
+    const dirIcon = sortConfig[index].direction === 'asc' ? '↑' : '↓';
+    const numJerarquia = sortConfig.length > 1 ? <span style={{ fontSize: '9px', verticalAlign: 'super' }}>{index + 1}</span> : null;
+    
+    return <span style={{ color: theme.primary, marginLeft: '4px', fontWeight: 'bold' }}>{dirIcon}{numJerarquia}</span>;
   }
 
   const abrirModalNuevo = () => { setModoEdicion(false); setServicioSeleccionado(null); setMostrarModalPrincipal(true); }
@@ -217,7 +256,6 @@ function Servicios() {
 
   const theme = { bgApp: '#F8FAFC', bgCard: '#FFFFFF', bgSubTable: '#F1F5F9', textMain: '#1E293B', textMuted: '#64748B', border: '#E2E8F0', primary: '#2563EB', success: '#16A34A', warning: '#F59E0B', danger: '#DC2626' }
   
-  // Estilos base para celdas
   const thStyle = { padding: '10px 8px', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: theme.textMuted, backgroundColor: '#F1F5F9', borderBottom: `2px solid ${theme.border}`, userSelect: 'none', position: 'relative', overflow: 'hidden', whiteSpace: 'nowrap' }
   const tdStyle = { padding: '4px 8px', fontSize: '12px', color: theme.textMain, borderBottom: `1px solid ${theme.border}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
 
@@ -240,9 +278,35 @@ function Servicios() {
 
   const controlesPaginacion = (
     <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F8FAFC' }}>
-      <div style={{ fontSize: '13px', color: theme.textMuted }}>
-        Mostrando {datosProcesados.length === 0 ? 0 : indiceUltimoRegistro - registrosPorPagina + 1} a {Math.min(indiceUltimoRegistro, datosProcesados.length)} de {datosProcesados.length}
+      
+      <div style={{ fontSize: '13px', color: theme.textMuted, display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <span>Mostrando {datosProcesados.length === 0 ? 0 : indiceUltimoRegistro - registrosPorPagina + 1} a {Math.min(indiceUltimoRegistro, datosProcesados.length)} de {datosProcesados.length}</span>
+        
+        {/* Tooltip Dinámico */}
+        <div style={{ position: 'relative' }} 
+             onMouseEnter={() => setMostrarTooltipOrden(true)} 
+             onMouseLeave={() => setMostrarTooltipOrden(false)}>
+          <div style={{ width: '18px', height: '18px', borderRadius: '50%', backgroundColor: '#DBEAFE', color: theme.primary, display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '12px', fontWeight: 'bold', cursor: 'help' }}>i</div>
+          
+          {mostrarTooltipOrden && (
+            <div style={{ position: 'absolute', bottom: '130%', left: 0, backgroundColor: '#1E293B', color: 'white', padding: '10px 14px', borderRadius: '8px', fontSize: '11px', width: '280px', zIndex: 100, boxShadow: '0 10px 15px -3px rgba(0,0,0,0.2)', lineHeight: '1.4' }}>
+              💡 <b>Ordenamiento Jerárquico Activado:</b><br/><br/>
+              • <b>1 clic</b> = Ordena.<br/>
+              • <b>2 clics</b> = Invierte orden.<br/>
+              • <b>3 clics</b> = Quita columna del filtro.<br/><br/>
+              El orden en el que hagas clic definirá la prioridad (1, 2, 3...) del desempate.
+            </div>
+          )}
+        </div>
+
+        {/* Botón rápido para restablecer orden */}
+        {(sortConfig.length > 1 || sortConfig[0].key !== 'idservicio') && (
+          <button onClick={() => setSortConfig([{ key: 'idservicio', direction: 'desc' }])} style={{ padding: '2px 8px', fontSize: '11px', backgroundColor: '#FEE2E2', color: theme.danger, border: '1px solid #FCA5A5', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+            ✕ Limpiar Orden
+          </button>
+        )}
       </div>
+
       <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
         <select value={registrosPorPagina} onChange={(e) => { setRegistrosPorPagina(Number(e.target.value)); setPaginaActual(1); }} style={{ padding: '4px 8px', borderRadius: '6px', border: `1px solid ${theme.border}`, fontSize: '12px', outline: 'none' }}>
           <option value={10}>10</option><option value={25}>25</option><option value={50}>50</option><option value={100}>100</option>
@@ -271,7 +335,6 @@ function Servicios() {
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
               <input type="text" placeholder="🔍 Buscar servicio, OC..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{ padding: '8px 12px', width: '280px', borderRadius: '6px', border: `1px solid ${theme.border}`, outline: 'none' }} />
               
-              {/* Filtro Estado */}
               <div className="filtro-dropdown-container" style={{ position: 'relative' }}>
                 <button onClick={(e) => { e.stopPropagation(); setMostrarMenuEstado(!mostrarMenuEstado); setMostrarMenuPrioridad(false); setMostrarMenuLugar(false); }} style={{ padding: '8px 12px', borderRadius: '6px', border: `1px solid ${theme.border}`, backgroundColor: filtroEstado.length > 0 ? '#EFF6FF' : theme.bgCard, color: filtroEstado.length > 0 ? theme.primary : theme.textMain, cursor: 'pointer' }}>Estados {filtroEstado.length > 0 && `(${filtroEstado.length})`} ▼</button>
                 {mostrarMenuEstado && (
@@ -287,7 +350,6 @@ function Servicios() {
                 )}
               </div>
 
-              {/* Filtro Prioridad */}
               <div className="filtro-dropdown-container" style={{ position: 'relative' }}>
                 <button onClick={(e) => { e.stopPropagation(); setMostrarMenuPrioridad(!mostrarMenuPrioridad); setMostrarMenuEstado(false); setMostrarMenuLugar(false); }} style={{ padding: '8px 12px', borderRadius: '6px', border: `1px solid ${theme.border}`, backgroundColor: filtroPrioridad.length > 0 ? '#EFF6FF' : theme.bgCard, color: filtroPrioridad.length > 0 ? theme.primary : theme.textMain, cursor: 'pointer' }}>Prioridad {filtroPrioridad.length > 0 && `(${filtroPrioridad.length})`} ▼</button>
                 {mostrarMenuPrioridad && (
@@ -303,7 +365,6 @@ function Servicios() {
                 )}
               </div>
 
-              {/* Filtro Lugar */}
               <div className="filtro-dropdown-container" style={{ position: 'relative' }}>
                 <button onClick={(e) => { e.stopPropagation(); setMostrarMenuLugar(!mostrarMenuLugar); setMostrarMenuEstado(false); setMostrarMenuPrioridad(false); }} style={{ padding: '8px 12px', borderRadius: '6px', border: `1px solid ${theme.border}`, backgroundColor: filtroLugar.length > 0 ? '#EFF6FF' : theme.bgCard, color: filtroLugar.length > 0 ? theme.primary : theme.textMain, cursor: 'pointer' }}>Lugares {filtroLugar.length > 0 && `(${filtroLugar.length})`} ▼</button>
                 {mostrarMenuLugar && (
@@ -350,8 +411,7 @@ function Servicios() {
           ) : (
             <div style={{ overflowX: 'auto', width: '100%' }}>
               
-              {/* ESTRUCTURA ROBUSTA CON COLGROUP PARA RESPETAR EL TAMAÑO DE COLUMNAS */}
-              <table style={{ tableLayout: 'fixed', minWidth: '1200px', width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+              <table style={{ tableLayout: 'fixed', minWidth: '1300px', width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                 <colgroup>
                   <col style={{ width: `${colWidths.expand}px` }} />
                   {columnas.id && <col style={{ width: `${colWidths.id}px` }} />}
@@ -360,6 +420,7 @@ function Servicios() {
                   {columnas.servicio && <col style={{ width: `${colWidths.servicio}px` }} />}
                   {columnas.lugar && <col style={{ width: `${colWidths.lugar}px` }} />}
                   {columnas.proveedor && <col style={{ width: `${colWidths.proveedor}px` }} />}
+                  {columnas.monto && <col style={{ width: `${colWidths.monto}px` }} />}
                   {columnas.responsable && <col style={{ width: `${colWidths.responsable}px` }} />}
                   {columnas.docs && <col style={{ width: `${colWidths.docs}px` }} />}
                   {columnas.fechasNuevas && <col style={{ width: `${colWidths.fechasNuevas}px` }} />}
@@ -377,6 +438,9 @@ function Servicios() {
                     {columnas.servicio && <th style={{...thStyle, cursor: 'pointer'}} onClick={() => handleSort('servicio')}>Servicio {renderSortIcon('servicio')}<Resizer colKey="servicio" /></th>}
                     {columnas.lugar && <th style={{...thStyle, cursor: 'pointer'}} onClick={() => handleSort('lugar')}>Lugar {renderSortIcon('lugar')}<Resizer colKey="lugar" /></th>}
                     {columnas.proveedor && <th style={thStyle}>Proveedor <Resizer colKey="proveedor" /></th>}
+                    
+                    {columnas.monto && <th style={{...thStyle, cursor: 'pointer', textAlign: 'right'}} onClick={() => handleSort('monto')}>Monto {renderSortIcon('monto')}<Resizer colKey="monto" /></th>}
+                    
                     {columnas.responsable && <th style={{...thStyle, cursor: 'pointer'}} onClick={() => handleSort('responsable')}>Responsable {renderSortIcon('responsable')}<Resizer colKey="responsable" /></th>}
                     {columnas.docs && <th style={{...thStyle, cursor: 'pointer'}} onClick={() => handleSort('num_requerimiento')}>Req / OC {renderSortIcon('num_requerimiento')}<Resizer colKey="docs" /></th>}
                     {columnas.fechasNuevas && <th style={{...thStyle, cursor: 'pointer'}} onClick={() => handleSort('solped')}>Solped {renderSortIcon('solped')}<Resizer colKey="fechasNuevas" /></th>}
@@ -401,8 +465,6 @@ function Servicios() {
                           {columnas.prioridad && <td style={{ ...tdStyle, color: prioColor, fontWeight: '700', fontSize: '11px' }} title={srv.prioridad?.toUpperCase()}>{srv.prioridad?.toUpperCase()}</td>}
                           
                           {columnas.fechaCreacion && <td style={tdStyle} title={srv.fechasolicitud ? new Date(srv.fechasolicitud).toLocaleDateString() : '---'}>{srv.fechasolicitud ? new Date(srv.fechasolicitud).toLocaleDateString() : '---'}</td>}
-                          
-                          {/* El contenedor del texto del servicio ahora se truncará perfectamente gracias a colgroup */}
                           {columnas.servicio && <td style={{ ...tdStyle }} title={srv.servicio}>
                             <div style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{srv.servicio}</div>
                             <div style={{ fontSize: '11px', color: theme.primary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{srv.sistema?.sistema || srv.tipoinfraestructura?.tipoinfraestructura}</div>
@@ -413,6 +475,12 @@ function Servicios() {
                           {columnas.proveedor && (
                             <td style={{ ...tdStyle, fontSize: '11px', fontWeight: '600', color: srv.cotizaciones?.some(c => c.estado?.toUpperCase() === 'APROBADA') ? theme.primary : theme.textMuted }} title={srv.cotizaciones?.find(c => c.estado?.toUpperCase() === 'APROBADA')?.proveedor?.razonsocial || 'Por definir'}>
                               {srv.cotizaciones?.find(c => c.estado?.toUpperCase() === 'APROBADA')?.proveedor?.razonsocial || 'Por definir'}
+                            </td>
+                          )}
+
+                          {columnas.monto && (
+                            <td style={{ ...tdStyle, textAlign: 'right', fontWeight: '700', color: srv.montoAprobado ? theme.textMain : '#CBD5E1' }}>
+                              {srv.montoAprobado ? `S/ ${srv.montoAprobado.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '---'}
                             </td>
                           )}
 
@@ -440,7 +508,7 @@ function Servicios() {
                         
                         {expandido && (
                           <tr style={{ backgroundColor: theme.bgSubTable, borderBottom: `2px solid ${theme.border}` }}>
-                            <td colSpan="13" style={{ padding: '16px 24px 24px 40px' }}>
+                            <td colSpan="14" style={{ padding: '16px 24px 24px 40px' }}>
                               <div style={{ backgroundColor: 'white', borderRadius: '8px', border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
                                 <div style={{ padding: '8px 12px', backgroundColor: '#F8FAFC', borderBottom: `1px solid ${theme.border}`, fontSize: '11px', fontWeight: 'bold', color: theme.textMuted }}>
                                   COTIZACIONES REGISTRADAS PARA ESTE SERVICIO:
