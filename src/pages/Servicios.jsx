@@ -1,7 +1,3 @@
-// ==============================================================================
-// VISTA MAESTRA DE SERVICIOS
-// ==============================================================================
-
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
@@ -44,9 +40,36 @@ function Servicios() {
   const [mostrarMenuColumnas, setMostrarMenuColumnas] = useState(false)
   
   const [columnas, setColumnas] = useState({
-    idPri: true, fechaCreacion: true, servicio: true, lugar: true,
-    responsable: false, docs: true, fechasNuevas: false, progreso: true, estado: true
+    id: true, prioridad: true, fechaCreacion: true, servicio: true, lugar: true,
+    proveedor: true, responsable: false, docs: true, fechasNuevas: false, progreso: true, estado: true
   })
+
+  // ===== MOTOR DE ANCHO DE COLUMNAS =====
+  const [colWidths, setColWidths] = useState({
+    expand: 40, id: 70, prioridad: 80, fechaCreacion: 90, servicio: 260, lugar: 100,
+    proveedor: 160, responsable: 100, docs: 110, fechasNuevas: 90, progreso: 120, estado: 140, acciones: 50
+  })
+
+  const startResize = (e, colKey) => {
+    e.stopPropagation()
+    const startX = e.clientX
+    const startWidth = colWidths[colKey]
+
+    const onMouseMove = (moveEvent) => {
+      const newWidth = Math.max(50, startWidth + (moveEvent.clientX - startX))
+      setColWidths(prev => ({ ...prev, [colKey]: newWidth }))
+    }
+
+    const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+      document.body.style.cursor = 'default'
+    }
+
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+    document.body.style.cursor = 'col-resize'
+  }
 
   // Modales
   const [mostrarModalPrincipal, setMostrarModalPrincipal] = useState(false)
@@ -126,7 +149,6 @@ function Servicios() {
     else setFiltro([...todasLasOpciones])
   }
 
-  // Cálculo de montos para la sub-tabla de cotizaciones desplegadas
   const calcularTotalCotizacion = (cot) => {
     if (!cot.detallecotizacion || cot.detallecotizacion.length === 0) return 0
     let totalFinal = 0
@@ -141,14 +163,24 @@ function Servicios() {
     return totalFinal + adicionales
   }
 
-  // Procesamiento de Datos (Filtro + Orden + Paginación)
-  let datosProcesados = listaServicios.filter(srv => {
-    let cumpleBusqueda = busqueda ? (srv.servicio?.toLowerCase() || '').includes(busqueda.toLowerCase()) || (srv.lugarejecucion?.lugarejecucion || '').toLowerCase().includes(busqueda.toLowerCase()) || (srv.orden_compra || '').toLowerCase().includes(busqueda.toLowerCase()) || (srv.num_requerimiento || '').toLowerCase().includes(busqueda.toLowerCase()) || srv.estado.toLowerCase().includes(busqueda.toLowerCase()) || srv.idservicio.toString().includes(busqueda.toLowerCase()) || (srv.responsable || '').toLowerCase().includes(busqueda.toLowerCase()) : true
-    let cumpleEstado = filtroEstado.length > 0 ? filtroEstado.includes(srv.estado) : true
-    let cumplePrioridad = filtroPrioridad.length > 0 ? filtroPrioridad.includes(srv.prioridad) : true
-    let cumpleLugar = filtroLugar.length > 0 ? filtroLugar.includes(srv.idlugar?.toString()) : true
-    return cumpleBusqueda && cumpleEstado && cumplePrioridad && cumpleLugar
-  })
+  // ===== LÓGICA DE FILTROS INTELIGENTES =====
+  // Evalúa si un servicio pasa los filtros actuales, ignorando uno específico (para calcular opciones disponibles)
+  const pasaFiltros = (srv, filtroIgnorado) => {
+    if (busqueda && !(srv.servicio?.toLowerCase() || '').includes(busqueda.toLowerCase()) && !(srv.lugarejecucion?.lugarejecucion || '').toLowerCase().includes(busqueda.toLowerCase()) && !(srv.orden_compra || '').toLowerCase().includes(busqueda.toLowerCase()) && !(srv.num_requerimiento || '').toLowerCase().includes(busqueda.toLowerCase()) && !srv.estado.toLowerCase().includes(busqueda.toLowerCase()) && !srv.idservicio.toString().includes(busqueda.toLowerCase()) && !(srv.responsable || '').toLowerCase().includes(busqueda.toLowerCase())) return false;
+    if (filtroIgnorado !== 'estado' && filtroEstado.length > 0 && !filtroEstado.includes(srv.estado)) return false;
+    if (filtroIgnorado !== 'prioridad' && filtroPrioridad.length > 0 && !filtroPrioridad.includes(srv.prioridad)) return false;
+    if (filtroIgnorado !== 'lugar' && filtroLugar.length > 0 && !filtroLugar.includes(srv.idlugar?.toString())) return false;
+    return true;
+  }
+
+  // Listas Dinámicas
+  const estadosDisponibles = [...new Set(listaServicios.filter(s => pasaFiltros(s, 'estado')).map(s => s.estado))].filter(Boolean)
+  const prioridadesDisponibles = [...new Set(listaServicios.filter(s => pasaFiltros(s, 'prioridad')).map(s => s.prioridad))].filter(Boolean)
+  const lugaresIdsDisponibles = [...new Set(listaServicios.filter(s => pasaFiltros(s, 'lugar')).map(s => s.idlugar?.toString()))].filter(Boolean)
+  const lugaresDisponibles = lugares.filter(l => lugaresIdsDisponibles.includes(l.idlugar.toString()))
+
+  // Datos finales a mostrar en tabla
+  let datosProcesados = listaServicios.filter(s => pasaFiltros(s, null))
 
   datosProcesados.sort((a, b) => {
     const getVal = (obj, key) => {
@@ -179,17 +211,21 @@ function Servicios() {
     return sortConfig.direction === 'asc' ? <span style={{ color: theme.primary, marginLeft: '4px' }}>↑</span> : <span style={{ color: theme.primary, marginLeft: '4px' }}>↓</span>
   }
 
-  const estadosUnicos = [...new Set(listaServicios.map(s => s.estado))]
-  const prioridadesUnicas = ['Baja', 'Media', 'Alta', 'Crítica']
-  const lugaresUnicos = lugares.map(l => l.idlugar.toString())
-
   const abrirModalNuevo = () => { setModoEdicion(false); setServicioSeleccionado(null); setMostrarModalPrincipal(true); }
   const abrirModalEditar = (srv) => { setModoEdicion(true); setServicioSeleccionado(srv); setMostrarModalPrincipal(true); }
   const abrirModalHomologacion = (srv) => { setServicioHomologacion(srv); setMostrarModalHomologacion(true); }
 
   const theme = { bgApp: '#F8FAFC', bgCard: '#FFFFFF', bgSubTable: '#F1F5F9', textMain: '#1E293B', textMuted: '#64748B', border: '#E2E8F0', primary: '#2563EB', success: '#16A34A', warning: '#F59E0B', danger: '#DC2626' }
-  const thStyle = { padding: '10px 12px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: theme.textMuted, backgroundColor: '#F1F5F9', borderBottom: `2px solid ${theme.border}`, cursor: 'pointer', userSelect: 'none' }
-  const tdStyle = { padding: '8px 12px', fontSize: '13px', color: theme.textMain, borderBottom: `1px solid ${theme.border}` }
+  
+  // Estilos base para celdas
+  const thStyle = { padding: '10px 8px', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: theme.textMuted, backgroundColor: '#F1F5F9', borderBottom: `2px solid ${theme.border}`, userSelect: 'none', position: 'relative', overflow: 'hidden', whiteSpace: 'nowrap' }
+  const tdStyle = { padding: '4px 8px', fontSize: '12px', color: theme.textMain, borderBottom: `1px solid ${theme.border}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+
+  const Resizer = ({ colKey }) => (
+    <div onMouseDown={(e) => startResize(e, colKey)}
+         style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '8px', cursor: 'col-resize', zIndex: 10, backgroundColor: 'transparent' }}
+         title="Arrastrar ancho" />
+  )
 
   const getBadgeColor = (estado) => { 
     const est = estado?.toUpperCase() || '';
@@ -241,9 +277,10 @@ function Servicios() {
                 {mostrarMenuEstado && (
                   <div onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: '100%', left: 0, backgroundColor: 'white', border: `1px solid ${theme.border}`, borderRadius: '8px', padding: '12px', zIndex: 50, width: '250px', maxHeight: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
                     <label style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 'bold', paddingBottom: '6px', borderBottom: `1px solid ${theme.border}` }}>
-                      <input type="checkbox" checked={filtroEstado.length === estadosUnicos.length && estadosUnicos.length > 0} onChange={() => handleSelectAll(estadosUnicos, filtroEstado, setFiltroEstado)} /> Seleccionar Todo
+                      <input type="checkbox" checked={filtroEstado.length === estadosDisponibles.length && estadosDisponibles.length > 0} onChange={() => handleSelectAll(estadosDisponibles, filtroEstado, setFiltroEstado)} /> Seleccionar Todo
                     </label>
-                    {estadosUnicos.map(est => (
+                    {estadosDisponibles.length === 0 && <div style={{ fontSize: '12px', color: theme.textMuted }}>No hay estados con los filtros actuales.</div>}
+                    {estadosDisponibles.map(est => (
                       <label key={est} style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}><input type="checkbox" checked={filtroEstado.includes(est)} onChange={() => handleCheckboxChange(est, filtroEstado, setFiltroEstado)} /> {est}</label>
                     ))}
                   </div>
@@ -256,9 +293,10 @@ function Servicios() {
                 {mostrarMenuPrioridad && (
                   <div onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: '100%', left: 0, backgroundColor: 'white', border: `1px solid ${theme.border}`, borderRadius: '8px', padding: '12px', zIndex: 50, width: '180px', display: 'flex', flexDirection: 'column', gap: '8px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
                     <label style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 'bold', paddingBottom: '6px', borderBottom: `1px solid ${theme.border}` }}>
-                      <input type="checkbox" checked={filtroPrioridad.length === prioridadesUnicas.length && prioridadesUnicas.length > 0} onChange={() => handleSelectAll(prioridadesUnicas, filtroPrioridad, setFiltroPrioridad)} /> Seleccionar Todo
+                      <input type="checkbox" checked={filtroPrioridad.length === prioridadesDisponibles.length && prioridadesDisponibles.length > 0} onChange={() => handleSelectAll(prioridadesDisponibles, filtroPrioridad, setFiltroPrioridad)} /> Seleccionar Todo
                     </label>
-                    {prioridadesUnicas.map(prio => (
+                    {prioridadesDisponibles.length === 0 && <div style={{ fontSize: '12px', color: theme.textMuted }}>No hay opciones.</div>}
+                    {prioridadesDisponibles.map(prio => (
                       <label key={prio} style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}><input type="checkbox" checked={filtroPrioridad.includes(prio)} onChange={() => handleCheckboxChange(prio, filtroPrioridad, setFiltroPrioridad)} /> {prio}</label>
                     ))}
                   </div>
@@ -271,9 +309,10 @@ function Servicios() {
                 {mostrarMenuLugar && (
                   <div onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: '100%', left: 0, backgroundColor: 'white', border: `1px solid ${theme.border}`, borderRadius: '8px', padding: '12px', zIndex: 50, width: '250px', maxHeight: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
                     <label style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 'bold', paddingBottom: '6px', borderBottom: `1px solid ${theme.border}` }}>
-                      <input type="checkbox" checked={filtroLugar.length === lugaresUnicos.length && lugaresUnicos.length > 0} onChange={() => handleSelectAll(lugaresUnicos, filtroLugar, setFiltroLugar)} /> Seleccionar Todo
+                      <input type="checkbox" checked={filtroLugar.length === lugaresIdsDisponibles.length && lugaresIdsDisponibles.length > 0} onChange={() => handleSelectAll(lugaresIdsDisponibles, filtroLugar, setFiltroLugar)} /> Seleccionar Todo
                     </label>
-                    {lugares.map(l => (
+                    {lugaresDisponibles.length === 0 && <div style={{ fontSize: '12px', color: theme.textMuted }}>No hay lugares con los filtros actuales.</div>}
+                    {lugaresDisponibles.map(l => (
                       <label key={l.idlugar} style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}><input type="checkbox" checked={filtroLugar.includes(l.idlugar.toString())} onChange={() => handleCheckboxChange(l.idlugar.toString(), filtroLugar, setFiltroLugar)} /> {l.lugarejecucion}</label>
                     ))}
                   </div>
@@ -281,7 +320,7 @@ function Servicios() {
               </div>
 
               {(filtroEstado.length > 0 || filtroPrioridad.length > 0 || filtroLugar.length > 0 || busqueda !== '') && (
-                <button onClick={() => { setFiltroEstado([]); setFiltroPrioridad([]); setFiltroLugar([]); setBusqueda(''); }} style={{ padding: '8px 12px', border: 'none', background: 'none', color: theme.danger, cursor: 'pointer', fontWeight: '600' }}>✕ Limpiar</button>
+                <button onClick={() => { setFiltroEstado([]); setFiltroPrioridad([]); setFiltroLugar([]); setBusqueda(''); }} style={{ padding: '6px 12px', backgroundColor: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: '6px', color: theme.danger, cursor: 'pointer', fontWeight: '700', fontSize: '12px' }}>✕ Limpiar Filtros</button>
               )}
             </div>
           </div>
@@ -309,21 +348,41 @@ function Servicios() {
           {cargando ? (
             <div style={{ padding: '60px', textAlign: 'center', color: theme.textMuted }}>Cargando información de la base de datos...</div>
           ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <div style={{ overflowX: 'auto', width: '100%' }}>
+              
+              {/* ESTRUCTURA ROBUSTA CON COLGROUP PARA RESPETAR EL TAMAÑO DE COLUMNAS */}
+              <table style={{ tableLayout: 'fixed', minWidth: '1200px', width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <colgroup>
+                  <col style={{ width: `${colWidths.expand}px` }} />
+                  {columnas.id && <col style={{ width: `${colWidths.id}px` }} />}
+                  {columnas.prioridad && <col style={{ width: `${colWidths.prioridad}px` }} />}
+                  {columnas.fechaCreacion && <col style={{ width: `${colWidths.fechaCreacion}px` }} />}
+                  {columnas.servicio && <col style={{ width: `${colWidths.servicio}px` }} />}
+                  {columnas.lugar && <col style={{ width: `${colWidths.lugar}px` }} />}
+                  {columnas.proveedor && <col style={{ width: `${colWidths.proveedor}px` }} />}
+                  {columnas.responsable && <col style={{ width: `${colWidths.responsable}px` }} />}
+                  {columnas.docs && <col style={{ width: `${colWidths.docs}px` }} />}
+                  {columnas.fechasNuevas && <col style={{ width: `${colWidths.fechasNuevas}px` }} />}
+                  {columnas.progreso && <col style={{ width: `${colWidths.progreso}px` }} />}
+                  {columnas.estado && <col style={{ width: `${colWidths.estado}px` }} />}
+                  <col style={{ width: `${colWidths.acciones}px` }} />
+                </colgroup>
+
                 <thead>
                   <tr>
-                    <th style={{...thStyle, width: '30px', cursor: 'default'}}></th>
-                    {columnas.idPri && <th style={thStyle} onClick={() => handleSort('idservicio')}>ID/Pri {renderSortIcon('idservicio')}</th>}
-                    {columnas.fechaCreacion && <th style={thStyle} onClick={() => handleSort('fechasolicitud')}>F. Creación {renderSortIcon('fechasolicitud')}</th>}
-                    {columnas.servicio && <th style={thStyle} onClick={() => handleSort('servicio')}>Servicio {renderSortIcon('servicio')}</th>}
-                    {columnas.lugar && <th style={thStyle} onClick={() => handleSort('lugar')}>Lugar {renderSortIcon('lugar')}</th>}
-                    {columnas.responsable && <th style={thStyle} onClick={() => handleSort('responsable')}>Responsable {renderSortIcon('responsable')}</th>}
-                    {columnas.docs && <th style={thStyle} onClick={() => handleSort('num_requerimiento')}>Req / OC {renderSortIcon('num_requerimiento')}</th>}
-                    {columnas.fechasNuevas && <th style={thStyle} onClick={() => handleSort('solped')}>Solped {renderSortIcon('solped')}</th>}
-                    {columnas.progreso && <th style={thStyle} onClick={() => handleSort('progreso')}>Progreso {renderSortIcon('progreso')}</th>}
-                    {columnas.estado && <th style={{...thStyle, textAlign: 'center'}} onClick={() => handleSort('estado')}>Estado {renderSortIcon('estado')}</th>}
-                    <th style={{...thStyle, width: '50px', cursor: 'default'}}></th>
+                    <th style={{...thStyle, textAlign: 'center', cursor: 'default'}}></th>
+                    {columnas.id && <th style={{...thStyle, cursor: 'pointer'}} onClick={() => handleSort('idservicio')}>ID {renderSortIcon('idservicio')}<Resizer colKey="id" /></th>}
+                    {columnas.prioridad && <th style={{...thStyle, cursor: 'pointer'}} onClick={() => handleSort('prioridad')}>Prioridad {renderSortIcon('prioridad')}<Resizer colKey="prioridad" /></th>}
+                    {columnas.fechaCreacion && <th style={{...thStyle, cursor: 'pointer'}} onClick={() => handleSort('fechasolicitud')}>F. Creación {renderSortIcon('fechasolicitud')}<Resizer colKey="fechaCreacion" /></th>}
+                    {columnas.servicio && <th style={{...thStyle, cursor: 'pointer'}} onClick={() => handleSort('servicio')}>Servicio {renderSortIcon('servicio')}<Resizer colKey="servicio" /></th>}
+                    {columnas.lugar && <th style={{...thStyle, cursor: 'pointer'}} onClick={() => handleSort('lugar')}>Lugar {renderSortIcon('lugar')}<Resizer colKey="lugar" /></th>}
+                    {columnas.proveedor && <th style={thStyle}>Proveedor <Resizer colKey="proveedor" /></th>}
+                    {columnas.responsable && <th style={{...thStyle, cursor: 'pointer'}} onClick={() => handleSort('responsable')}>Responsable {renderSortIcon('responsable')}<Resizer colKey="responsable" /></th>}
+                    {columnas.docs && <th style={{...thStyle, cursor: 'pointer'}} onClick={() => handleSort('num_requerimiento')}>Req / OC {renderSortIcon('num_requerimiento')}<Resizer colKey="docs" /></th>}
+                    {columnas.fechasNuevas && <th style={{...thStyle, cursor: 'pointer'}} onClick={() => handleSort('solped')}>Solped {renderSortIcon('solped')}<Resizer colKey="fechasNuevas" /></th>}
+                    {columnas.progreso && <th style={{...thStyle, cursor: 'pointer'}} onClick={() => handleSort('progreso')}>Progreso {renderSortIcon('progreso')}<Resizer colKey="progreso" /></th>}
+                    {columnas.estado && <th style={{...thStyle, textAlign: 'center', cursor: 'pointer'}} onClick={() => handleSort('estado')}>Estado {renderSortIcon('estado')}<Resizer colKey="estado" /></th>}
+                    <th style={{...thStyle, cursor: 'default'}}></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -337,18 +396,35 @@ function Servicios() {
                       <React.Fragment key={srv.idservicio}>
                         <tr style={{ borderLeft: `4px solid ${prioColor}`, backgroundColor: expandido ? '#F8FAFC' : 'white' }}>
                           <td style={{...tdStyle, textAlign: 'center'}}><button onClick={(e) => toggleFila(srv.idservicio, e)} style={{ background: 'none', border: 'none', cursor: tieneCotizaciones ? 'pointer' : 'default', color: tieneCotizaciones ? theme.primary : '#CBD5E1', transform: expandido ? 'rotate(90deg)' : 'none' }}>▶</button></td>
-                          {columnas.idPri && <td style={{ ...tdStyle, fontWeight: '700' }}>#{srv.idservicio}<div style={{fontSize: '10px', color: prioColor}}>{srv.prioridad?.toUpperCase()}</div></td>}
-                          {columnas.fechaCreacion && <td style={tdStyle}>{srv.fechasolicitud ? new Date(srv.fechasolicitud).toLocaleDateString() : '---'}</td>}
-                          {columnas.servicio && <td style={{ ...tdStyle, maxWidth: '250px' }}><div style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{srv.servicio}</div><div style={{ fontSize: '11px', color: theme.primary }}>{srv.sistema?.sistema || srv.tipoinfraestructura?.tipoinfraestructura}</div></td>}
-                          {columnas.lugar && <td style={tdStyle}>{srv.lugarejecucion?.lugarejecucion || '---'}</td>}
-                          {columnas.responsable && <td style={tdStyle}>{srv.responsable || '---'}</td>}
-                          {columnas.docs && <td style={tdStyle}><div style={{fontSize: '11px'}}>R: {srv.num_requerimiento || '-'}</div><div style={{fontSize: '11px'}}>OC: {srv.orden_compra || '-'}</div></td>}
-                          {columnas.fechasNuevas && <td style={tdStyle}><div style={{fontSize: '11px'}}>Sol: {srv.solped || '-'}</div></td>}
-                          {columnas.progreso && <td style={tdStyle}><div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: '600', marginBottom: '2px' }}><span>{srv.progreso || 0}%</span></div><div style={{ width: '100%', height: '6px', backgroundColor: '#E2E8F0', borderRadius: '3px', overflow: 'hidden' }}><div style={{ width: `${srv.progreso || 0}%`, height: '100%', backgroundColor: srv.progreso === 100 ? theme.success : theme.primary }}></div></div></td>}
+                          
+                          {columnas.id && <td style={{ ...tdStyle, fontWeight: '700' }} title={`#${srv.idservicio}`}>#{srv.idservicio}</td>}
+                          {columnas.prioridad && <td style={{ ...tdStyle, color: prioColor, fontWeight: '700', fontSize: '11px' }} title={srv.prioridad?.toUpperCase()}>{srv.prioridad?.toUpperCase()}</td>}
+                          
+                          {columnas.fechaCreacion && <td style={tdStyle} title={srv.fechasolicitud ? new Date(srv.fechasolicitud).toLocaleDateString() : '---'}>{srv.fechasolicitud ? new Date(srv.fechasolicitud).toLocaleDateString() : '---'}</td>}
+                          
+                          {/* El contenedor del texto del servicio ahora se truncará perfectamente gracias a colgroup */}
+                          {columnas.servicio && <td style={{ ...tdStyle }} title={srv.servicio}>
+                            <div style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{srv.servicio}</div>
+                            <div style={{ fontSize: '11px', color: theme.primary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{srv.sistema?.sistema || srv.tipoinfraestructura?.tipoinfraestructura}</div>
+                          </td>}
+                          
+                          {columnas.lugar && <td style={tdStyle} title={srv.lugarejecucion?.lugarejecucion || '---'}>{srv.lugarejecucion?.lugarejecucion || '---'}</td>}
+                          
+                          {columnas.proveedor && (
+                            <td style={{ ...tdStyle, fontSize: '11px', fontWeight: '600', color: srv.cotizaciones?.some(c => c.estado?.toUpperCase() === 'APROBADA') ? theme.primary : theme.textMuted }} title={srv.cotizaciones?.find(c => c.estado?.toUpperCase() === 'APROBADA')?.proveedor?.razonsocial || 'Por definir'}>
+                              {srv.cotizaciones?.find(c => c.estado?.toUpperCase() === 'APROBADA')?.proveedor?.razonsocial || 'Por definir'}
+                            </td>
+                          )}
+
+                          {columnas.responsable && <td style={tdStyle} title={srv.responsable || '---'}>{srv.responsable || '---'}</td>}
+                          {columnas.docs && <td style={tdStyle} title={`R: ${srv.num_requerimiento || '-'}\nOC: ${srv.orden_compra || '-'}`}><div style={{fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>R: {srv.num_requerimiento || '-'}</div><div style={{fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>OC: {srv.orden_compra || '-'}</div></td>}
+                          {columnas.fechasNuevas && <td style={tdStyle} title={`Sol: ${srv.solped || '-'}`}><div style={{fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>Sol: {srv.solped || '-'}</div></td>}
+                          
+                          {columnas.progreso && <td style={tdStyle}><div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', fontWeight: '600', marginBottom: '2px' }}><span>{srv.progreso || 0}%</span></div><div style={{ width: '100%', height: '4px', backgroundColor: '#E2E8F0', borderRadius: '2px', overflow: 'hidden' }}><div style={{ width: `${srv.progreso || 0}%`, height: '100%', backgroundColor: srv.progreso === 100 ? theme.success : theme.primary }}></div></div></td>}
+                          
                           {columnas.estado && <td style={{ ...tdStyle, textAlign: 'center' }}><span style={{ padding: '4px 8px', backgroundColor: badge.bg, color: badge.text, borderRadius: '12px', fontSize: '10px', fontWeight: '700', whiteSpace: 'nowrap' }}>{srv.estado}</span></td>}
                           
-                          {/* Botón de 3 puntos con la tabla de acciones integrada y opción de Evaluar */}
-                          <td style={{ ...tdStyle, textAlign: 'center', position: 'relative' }}>
+                          <td style={{ ...tdStyle, textAlign: 'center', position: 'relative', overflow: 'visible' }}>
                             <div className="menu-acciones-container" style={{ display: 'inline-block' }}>
                               <button onClick={(e) => toggleAcciones(srv.idservicio, e)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: theme.textMuted }}>⋮</button>
                               {menuAccionesFila === srv.idservicio && (
@@ -362,10 +438,9 @@ function Servicios() {
                           </td>
                         </tr>
                         
-                        {/* TABLA DESPLEGABLE REAL DE COTIZACIONES */}
                         {expandido && (
                           <tr style={{ backgroundColor: theme.bgSubTable, borderBottom: `2px solid ${theme.border}` }}>
-                            <td colSpan="11" style={{ padding: '16px 24px 24px 40px' }}>
+                            <td colSpan="13" style={{ padding: '16px 24px 24px 40px' }}>
                               <div style={{ backgroundColor: 'white', borderRadius: '8px', border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
                                 <div style={{ padding: '8px 12px', backgroundColor: '#F8FAFC', borderBottom: `1px solid ${theme.border}`, fontSize: '11px', fontWeight: 'bold', color: theme.textMuted }}>
                                   COTIZACIONES REGISTRADAS PARA ESTE SERVICIO:
