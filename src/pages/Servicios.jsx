@@ -80,7 +80,7 @@ function Servicios() {
     const { data: dataServicios } = await supabase.from('servicios').select(`
       *, lugarejecucion(lugarejecucion), usuario(nombre), tipoinfraestructura(tipoinfraestructura),
       tiposervicio(tiposervicio), sistema(sistema), subsistema(sub_sistema),
-      cotizaciones(idcotizacion, estado, fecharecepcion, gastos_generales, utilidades, plazo_dias, entregables,
+      cotizaciones(idcotizacion, estado, fecha_envio_cotizacion, fecha_visita_tecnica, fecharecepcion, fechaaceptacion, fechainicio, fechafin, gastos_generales, utilidades, plazo_dias, entregables,
       puntaje_eco, puntaje_plazo, puntaje_alcance, puntaje_pago, proveedor(razonsocial), moneda(moneda),
       detallecotizacion(*), comentario(comentario, fecha))
     `)
@@ -139,17 +139,14 @@ function Servicios() {
       if (existingIndex >= 0) {
         const currentDir = prev[existingIndex].direction;
         if (currentDir === 'asc') {
-          // Si estaba ascendente, cambia a descendente
           const newSort = [...prev];
           newSort[existingIndex].direction = 'desc';
           return newSort;
         } else {
-          // Si estaba descendente (Tercer Clic), se quita del ordenamiento
           const newSort = prev.filter((_, i) => i !== existingIndex);
-          return newSort.length > 0 ? newSort : [{ key: 'idservicio', direction: 'desc' }]; // Evita que se quede vacío
+          return newSort.length > 0 ? newSort : [{ key: 'idservicio', direction: 'desc' }]; 
         }
       } else {
-        // Agrega la nueva columna AL FINAL de la jerarquía
         return [...prev, { key, direction: 'asc' }];
       }
     })
@@ -195,13 +192,11 @@ function Servicios() {
   const lugaresIdsDisponibles = [...new Set(listaServicios.filter(s => pasaFiltros(s, 'lugar')).map(s => s.idlugar?.toString()))].filter(Boolean)
   const lugaresDisponibles = lugares.filter(l => lugaresIdsDisponibles.includes(l.idlugar.toString()))
 
-  // PRE-CÁLCULO PARA MEJORAR EL RENDIMIENTO EXTREMAMENTE
   let datosProcesados = listaServicios.filter(s => pasaFiltros(s, null)).map(srv => ({
     ...srv,
     montoAprobado: getMontoAprobado(srv)
   }))
 
-  // ===== ORDENAMIENTO ESTRICTO MATEMÁTICO =====
   datosProcesados.sort((a, b) => {
     for (let i = 0; i < sortConfig.length; i++) {
       const { key, direction } = sortConfig[i];
@@ -219,7 +214,6 @@ function Servicios() {
       if (valA === null || valA === undefined) valA = ''
       if (valB === null || valB === undefined) valB = ''
       
-      // Asegurar que Monto, ID y Progreso se ordenen matemáticamente (no por texto)
       if (key === 'idservicio' || key === 'progreso' || key === 'monto') {
         valA = Number(valA) || 0;
         valB = Number(valB) || 0;
@@ -230,7 +224,6 @@ function Servicios() {
 
       if (valA < valB) return direction === 'asc' ? -1 : 1
       if (valA > valB) return direction === 'asc' ? 1 : -1
-      // Si son iguales, el bucle for avanza a la siguiente jerarquía de ordenamiento
     }
     return 0 
   })
@@ -239,7 +232,6 @@ function Servicios() {
   const indiceUltimoRegistro = paginaActual * registrosPorPagina
   const datosPaginados = datosProcesados.slice(indiceUltimoRegistro - registrosPorPagina, indiceUltimoRegistro)
 
-  // Indicador Visual de Jerarquía Dinámico
   const renderSortIcon = (key) => {
     const index = sortConfig.findIndex(s => s.key === key);
     if (index === -1) return <span style={{ color: '#CBD5E1', marginLeft: '4px' }}>↕</span>;
@@ -282,7 +274,6 @@ function Servicios() {
       <div style={{ fontSize: '13px', color: theme.textMuted, display: 'flex', alignItems: 'center', gap: '12px' }}>
         <span>Mostrando {datosProcesados.length === 0 ? 0 : indiceUltimoRegistro - registrosPorPagina + 1} a {Math.min(indiceUltimoRegistro, datosProcesados.length)} de {datosProcesados.length}</span>
         
-        {/* Tooltip Dinámico */}
         <div style={{ position: 'relative' }} 
              onMouseEnter={() => setMostrarTooltipOrden(true)} 
              onMouseLeave={() => setMostrarTooltipOrden(false)}>
@@ -299,7 +290,6 @@ function Servicios() {
           )}
         </div>
 
-        {/* Botón rápido para restablecer orden */}
         {(sortConfig.length > 1 || sortConfig[0].key !== 'idservicio') && (
           <button onClick={() => setSortConfig([{ key: 'idservicio', direction: 'desc' }])} style={{ padding: '2px 8px', fontSize: '11px', backgroundColor: '#FEE2E2', color: theme.danger, border: '1px solid #FCA5A5', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
             ✕ Limpiar Orden
@@ -326,7 +316,6 @@ function Servicios() {
       <TopBar />
       <div style={{ maxWidth: '1600px', width: '95%', margin: '0 auto' }}>
         
-        {/* Cabecera y Filtros */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
           <div>
             <button onClick={() => navigate('/dashboard')} style={{ marginBottom: '12px', padding: '6px 12px', backgroundColor: theme.bgCard, border: `1px solid ${theme.border}`, borderRadius: '6px', cursor: 'pointer', fontWeight: '600', color: theme.textMuted, fontSize: '13px' }}>← Volver</button>
@@ -388,7 +377,6 @@ function Servicios() {
           <button onClick={abrirModalNuevo} style={{ padding: '10px 20px', backgroundColor: theme.primary, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>+ Nuevo Servicio</button>
         </div>
 
-        {/* Tabla */}
         <div style={{ backgroundColor: theme.bgCard, borderRadius: '12px', border: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column' }}>
           
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${theme.border}` }}>
@@ -508,35 +496,75 @@ function Servicios() {
                         
                         {expandido && (
                           <tr style={{ backgroundColor: theme.bgSubTable, borderBottom: `2px solid ${theme.border}` }}>
-                            <td colSpan="14" style={{ padding: '16px 24px 24px 40px' }}>
+                            {/* CÁLCULO EXACTO DEL COLSPAN SEGÚN COLUMNAS VISIBLES PARA EVITAR DESBORDES */}
+                            <td colSpan={2 + Object.values(columnas).filter(Boolean).length} style={{ padding: '16px 24px 24px 40px' }}>
                               <div style={{ backgroundColor: 'white', borderRadius: '8px', border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
-                                <div style={{ padding: '8px 12px', backgroundColor: '#F8FAFC', borderBottom: `1px solid ${theme.border}`, fontSize: '11px', fontWeight: 'bold', color: theme.textMuted }}>
-                                  COTIZACIONES REGISTRADAS PARA ESTE SERVICIO:
-                                </div>
-                                {tieneCotizaciones ? (
-                                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                    <thead>
-                                      <tr>
-                                        <th style={{ padding: '8px 12px', fontSize: '11px', color: theme.textMuted, borderBottom: `1px solid ${theme.border}` }}>Proveedor</th>
-                                        <th style={{ padding: '8px 12px', fontSize: '11px', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, textAlign: 'right' }}>Monto Total</th>
-                                        <th style={{ padding: '8px 12px', fontSize: '11px', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, textAlign: 'center' }}>Estado Prov.</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {srv.cotizaciones.map(cot => (
-                                        <tr key={cot.idcotizacion} style={{ borderBottom: `1px solid ${theme.border}` }}>
-                                          <td style={{ padding: '8px 12px', fontSize: '12px', fontWeight: '600', color: theme.textMain }}>{cot.proveedor?.razonsocial || 'Desconocido'}</td>
-                                          <td style={{ padding: '8px 12px', fontSize: '12px', fontWeight: '700', textAlign: 'right', color: theme.primary }}>{cot.moneda?.moneda?.includes('USD') ? '$' : 'S/'} {calcularTotalCotizacion(cot).toFixed(2)}</td>
-                                          <td style={{ padding: '8px 12px', fontSize: '11px', textAlign: 'center', fontWeight: '700' }}>{cot.estado}</td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                ) : (
-                                  <div style={{ padding: '16px', textAlign: 'center', fontSize: '12px', color: theme.textMuted }}>
-                                    No hay cotizaciones registradas para este servicio todavía.
-                                  </div>
-                                )}
+                                
+                                {(() => {
+                                  const cotizacionesValidas = srv.cotizaciones?.filter(c => !['Rechazada', 'De Baja'].includes(c.estado)) || [];
+                                  const countSolicitadas = cotizacionesValidas.filter(c => c.estado === 'Solicitada').length;
+                                  const countEntregadas = cotizacionesValidas.filter(c => ['Entregada', 'Aprobada'].includes(c.estado)).length;
+                                  
+                                  return cotizacionesValidas.length > 0 ? (
+                                    <>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', backgroundColor: '#F8FAFC', borderBottom: `1px solid ${theme.border}` }}>
+                                        <span style={{ fontSize: '12px', fontWeight: 'bold', color: theme.textMain }}>
+                                          ESTADO DE COTIZACIONES ACTIVAS:
+                                        </span>
+                                        <div style={{ display: 'flex', gap: '12px' }}>
+                                          <span style={{ fontSize: '11px', padding: '4px 10px', backgroundColor: '#E0F2FE', color: '#0369A1', borderRadius: '12px', fontWeight: 'bold' }}>
+                                            {countSolicitadas} Solicitadas
+                                          </span>
+                                          <span style={{ fontSize: '11px', padding: '4px 10px', backgroundColor: '#FEF08A', color: '#854D0E', borderRadius: '12px', fontWeight: 'bold' }}>
+                                            {countEntregadas} Recibidas/Entregadas
+                                          </span>
+                                        </div>
+                                      </div>
+                                      
+                                      {/* TABLA INTERNA 100% FIJA EN TAMAÑOS */}
+                                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', tableLayout: 'fixed' }}>
+                                        <thead>
+                                          <tr>
+                                            <th style={{ padding: '8px 12px', fontSize: '10px', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, width: '18%' }}>Proveedor</th>
+                                            <th style={{ padding: '8px 12px', fontSize: '10px', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, width: '12%' }}>Estado</th>
+                                            <th style={{ padding: '8px 12px', fontSize: '10px', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, width: '10%' }}>F. Envío</th>
+                                            <th style={{ padding: '8px 12px', fontSize: '10px', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, width: '10%' }}>F. Visita</th>
+                                            <th style={{ padding: '8px 12px', fontSize: '10px', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, width: '10%' }}>Recepción</th>
+                                            <th style={{ padding: '8px 12px', fontSize: '10px', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, width: '10%' }}>Aceptación</th>
+                                            <th style={{ padding: '8px 12px', fontSize: '10px', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, width: '10%' }}>Inicio</th>
+                                            <th style={{ padding: '8px 12px', fontSize: '10px', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, width: '10%' }}>Fin</th>
+                                            <th style={{ padding: '8px 12px', fontSize: '10px', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, textAlign: 'right', width: '10%' }}>Total Estimado</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {cotizacionesValidas.map(cot => (
+                                            <tr key={cot.idcotizacion} style={{ borderBottom: `1px solid ${theme.border}` }}>
+                                              {/* APLICAMOS REGLA DE ELLIPSIS PARA TEXTOS LARGOS COMO EL PROVEEDOR */}
+                                              <td style={{ padding: '8px 12px', fontSize: '11px', fontWeight: '600', color: theme.textMain, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={cot.proveedor?.razonsocial || 'Desconocido'}>
+                                                {cot.proveedor?.razonsocial || 'Desconocido'}
+                                              </td>
+                                              <td style={{ padding: '8px 12px', fontSize: '11px', fontWeight: '700' }}>{cot.estado}</td>
+                                              <td style={{ padding: '8px 12px', fontSize: '11px', color: theme.textMuted }}>{cot.fecha_envio_cotizacion || '---'}</td>
+                                              <td style={{ padding: '8px 12px', fontSize: '11px', color: theme.textMuted }}>{cot.fecha_visita_tecnica || '---'}</td>
+                                              <td style={{ padding: '8px 12px', fontSize: '11px', color: theme.textMuted }}>{cot.fecharecepcion || '---'}</td>
+                                              <td style={{ padding: '8px 12px', fontSize: '11px', color: theme.textMuted }}>{cot.fechaaceptacion || '---'}</td>
+                                              <td style={{ padding: '8px 12px', fontSize: '11px', color: theme.textMuted }}>{cot.fechainicio || '---'}</td>
+                                              <td style={{ padding: '8px 12px', fontSize: '11px', color: theme.textMuted }}>{cot.fechafin || '---'}</td>
+                                              <td style={{ padding: '8px 12px', fontSize: '11px', fontWeight: '700', textAlign: 'right', color: theme.primary }}>
+                                                {cot.estado === 'Solicitada' ? 'Por definir' : `${cot.moneda?.moneda?.includes('USD') ? '$' : 'S/'} ${calcularTotalCotizacion(cot).toFixed(2)}`}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </>
+                                  ) : (
+                                    <div style={{ padding: '24px', textAlign: 'center', fontSize: '13px', color: theme.textMuted }}>
+                                      No hay cotizaciones activas (Solicitadas o Entregadas) registradas para este servicio.
+                                    </div>
+                                  )
+                                })()}
+                                
                               </div>
                             </td>
                           </tr>

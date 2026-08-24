@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts'
@@ -7,111 +7,101 @@ import TopBar from '../components/TopBar'
 function Dashboard() {
   const navigate = useNavigate()
   
-  const [datosGrafico, setDatosGrafico] = useState([])
-  const [totalServicios, setTotalServicios] = useState(0)
+  // ================= ESTADOS DE DATOS =================
+  const [rawServicios, setRawServicios] = useState([])
+  const [lugares, setLugares] = useState([])
   const [cargando, setCargando] = useState(true)
   
-  // Variables para Cancelados (Modal)
-  const [detalleCancelados, setDetalleCancelados] = useState([])
+  // ================= ESTADOS DE FILTROS =================
+  const [busqueda, setBusqueda] = useState('')
+  const [filtroEstado, setFiltroEstado] = useState([])
+  const [filtroPrioridad, setFiltroPrioridad] = useState([])
+  const [filtroLugar, setFiltroLugar] = useState([])
+  
+  const [fechaInicio, setFechaInicio] = useState('')
+  const [fechaFin, setFechaFin] = useState('')
+  const [mostrarSinFecha, setMostrarSinFecha] = useState(false)
+
+  // ================= ESTADOS DE UI (Dropdowns y Modales) =================
+  const [mostrarMenuEstado, setMostrarMenuEstado] = useState(false)
+  const [mostrarMenuPrioridad, setMostrarMenuPrioridad] = useState(false)
+  const [mostrarMenuLugar, setMostrarMenuLugar] = useState(false)
   const [mostrarModalCancelados, setMostrarModalCancelados] = useState(false)
 
-  // Filtros de Tiempo interactivos (Línea de tiempo)
-  const [filtroAnio, setFiltroAnio] = useState('ALL')
-  const [filtroMes, setFiltroMes] = useState('ALL')
-  const [aniosDisponibles, setAniosDisponibles] = useState([])
-  const [rawServicios, setRawServicios] = useState([])
+  // ================= ESTADOS CALCULADOS PARA GRÁFICOS =================
+  const [datosGrafico, setDatosGrafico] = useState([])
+  const [totalServicios, setTotalServicios] = useState(0)
+  const [detalleCancelados, setDetalleCancelados] = useState([])
 
-  // ================= PALETA DE COLORES INSTITUCIONAL (Centenario) =================
-  const theme = {
-    bgApp: '#F4F7F9',
-    bgCard: '#FFFFFF',
-    textMain: '#0F172A',
-    textMuted: '#64748B',
-    border: '#E2E8F0',
-    primary: '#0B2F6D',
-    accent: '#D4AF37',
-    danger: '#DC2626'
-  }
+  // ================= PALETA DE COLORES =================
+  const theme = { bgApp: '#F4F7F9', bgCard: '#FFFFFF', textMain: '#0F172A', textMuted: '#64748B', border: '#E2E8F0', primary: '#0B2F6D', accent: '#D4AF37', danger: '#DC2626' }
 
-  // Colores exactos vinculados a los nombres reales de la base de datos
   const COLORES_ESTADO = {
-    'PENDIENTE': '#94A3B8',                 // Gris Claro
-    'DOCUMENTACION INGRESO': '#64748B',      // Gris Oscuro
-    'COTIZACIÓN': '#3B82F6',                 // Azul Claro
-    'ESPERA DE APROBACION': '#D4AF37',       // Dorado / Ámbar
-    'EN EJECUCIÓN': '#10B981',               // Verde Esmeralda
-    'EJECUTADO': '#059669',                  // Verde Oscuro
-    'COMPLETADO': '#0B2F6D',                 // Azul Marino Profundo (Éxito final)
-    'CANCELADOS / BAJAS': '#EF4444'          // Rojo Suave (Agrupados)
+    'PENDIENTE': '#94A3B8', 'DOCUMENTACION INGRESO': '#64748B', 'COTIZACIÓN': '#3B82F6', 
+    'ESPERA DE APROBACION': '#D4AF37', 'EN EJECUCIÓN': '#10B981', 'EJECUTADO': '#059669', 
+    'COMPLETADO': '#0B2F6D', 'CANCELADOS / BAJAS': '#EF4444'
   }
 
-  // Orden estricto del proceso
-  const ORDEN_PROCESO = [
-    'PENDIENTE',
-    'DOCUMENTACION INGRESO',
-    'COTIZACIÓN',
-    'ESPERA DE APROBACION',
-    'EN EJECUCIÓN',
-    'EJECUTADO',
-    'COMPLETADO',
-    'CANCELADOS / BAJAS'
-  ]
+  const ORDEN_PROCESO = ['COMPLETADO', 'EJECUTADO', 'EN EJECUCIÓN', 'DOCUMENTACION INGRESO', 'ESPERA DE APROBACION', 'COTIZACIÓN', 'PENDIENTE', 'CANCELADOS / BAJAS']
+  const LISTA_ESTADOS_FILTRO = ['PENDIENTE', 'COTIZACIÓN', 'ESPERA DE APROBACION', 'EN EJECUCIÓN', 'EJECUTADO', 'COMPLETADO', 'DOCUMENTACION INGRESO', 'CANCELADO', 'REQUERIMIENTO CANCELADO']
 
-  const MESES = [
-    { val: '0', label: 'Ene' }, { val: '1', label: 'Feb' }, { val: '2', label: 'Mar' },
-    { val: '3', label: 'Abr' }, { val: '4', label: 'May' }, { val: '5', label: 'Jun' },
-    { val: '6', label: 'Jul' }, { val: '7', label: 'Ago' }, { val: '8', label: 'Sep' },
-    { val: '9', label: 'Oct' }, { val: '10', label: 'Nov' }, { val: '11', label: 'Dic' }
-  ]
-
-  const cargarEstadisticasDB = async () => {
+  // ================= CARGA DE DATOS =================
+  const cargarDatosDB = async () => {
     setCargando(true)
-    const { data: servicios, error } = await supabase.from('servicios').select('idservicio, estado, fechasolicitud')
+    const [resSrv, resLugares] = await Promise.all([
+      supabase.from('servicios').select('idservicio, servicio, estado, fechasolicitud, prioridad, idlugar'),
+      supabase.from('lugarejecucion').select('*').eq('activo', true)
+    ])
     
-    if (error) {
-      console.error(error)
-      setCargando(false)
-      return
-    }
+    if (resSrv.data) setRawServicios(resSrv.data)
+    if (resLugares.data) setLugares(resLugares.data)
     
-    // Extraer años únicos para los filtros de la línea de tiempo
-    const años = [...new Set(servicios.map(s => {
-      if (!s.fechasolicitud) return null;
-      // Tratar la fecha de manera segura
-      const [year] = s.fechasolicitud.split('-');
-      return year;
-    }))].filter(Boolean).sort((a, b) => b - a); // Ordenar descendente (más recientes primero)
-    
-    setAniosDisponibles(años);
-    setRawServicios(servicios || [])
-    aplicarFiltrosYAgrupar(servicios || [], 'ALL', 'ALL')
     setCargando(false)
   }
 
-  const aplicarFiltrosYAgrupar = (serviciosBase, anioSel, mesSel) => {
-    let serviciosFiltrados = serviciosBase
+  useEffect(() => { cargarDatosDB() }, [])
 
-    // 1. Filtrar por Año y Mes si no es "ALL"
-    if (anioSel !== 'ALL') {
-      serviciosFiltrados = serviciosBase.filter(srv => {
-        if (!srv.fechasolicitud) return false
-        const [y, m] = srv.fechasolicitud.split('-') // Formato YYYY-MM-DD
-        if (y !== anioSel) return false
-        if (mesSel !== 'ALL' && parseInt(m) - 1 !== parseInt(mesSel)) return false
-        return true
-      })
-    }
+  // ================= MOTOR DE FILTRADO CENTRALIZADO =================
+  const datosFiltrados = useMemo(() => {
+    return rawServicios.filter(srv => {
+      if (busqueda) {
+        const term = busqueda.toLowerCase();
+        const matchNombre = srv.servicio?.toLowerCase().includes(term);
+        const matchId = srv.idservicio?.toString().includes(term);
+        if (!matchNombre && !matchId) return false;
+      }
 
-    // 2. Contar y Agrupar
+      if (filtroEstado.length > 0 && !filtroEstado.includes(srv.estado)) return false;
+      if (filtroPrioridad.length > 0 && !filtroPrioridad.includes(srv.prioridad)) return false;
+      if (filtroLugar.length > 0 && !filtroLugar.includes(srv.idlugar?.toString())) return false;
+
+      const tieneFecha = !!srv.fechasolicitud;
+      
+      if (mostrarSinFecha) return !tieneFecha;
+
+      if (fechaInicio || fechaFin) {
+        if (!tieneFecha) return false; 
+        const fechaSrv = new Date(srv.fechasolicitud);
+        if (fechaInicio && fechaSrv < new Date(fechaInicio)) return false;
+        if (fechaFin && fechaSrv > new Date(fechaFin)) return false;
+      }
+
+      return true;
+    });
+  }, [rawServicios, busqueda, filtroEstado, filtroPrioridad, filtroLugar, fechaInicio, fechaFin, mostrarSinFecha]);
+
+  const cantidadSinFecha = rawServicios.filter(s => !s.fechasolicitud).length;
+
+  // ================= PROCESAMIENTO PARA LOS GRÁFICOS =================
+  useEffect(() => {
     const conteo = {}
     const desgloseCanceladosTemp = []
     let total = 0
 
-    serviciosFiltrados.forEach(srv => {
+    datosFiltrados.forEach(srv => {
       const estadoOriginal = srv.estado?.toUpperCase() || 'PENDIENTE'
       let estadoAgrupado = estadoOriginal
 
-      // Agrupación de Cancelados
       if (estadoOriginal.includes('CANCELADO')) {
         estadoAgrupado = 'CANCELADOS / BAJAS'
         const idx = desgloseCanceladosTemp.findIndex(d => d.estado === estadoOriginal)
@@ -125,14 +115,12 @@ function Dashboard() {
 
     setDetalleCancelados(desgloseCanceladosTemp)
 
-    // 3. Formatear y Ordenar por Flujo de Proceso
     const dataFormateada = Object.keys(conteo).map(estado => ({
       name: estado,
       value: conteo[estado],
       porcentaje: total > 0 ? ((conteo[estado] / total) * 100).toFixed(0) : 0
     }))
 
-    // Aplicar el orden del arreglo ORDEN_PROCESO
     dataFormateada.sort((a, b) => {
       const indexA = ORDEN_PROCESO.indexOf(a.name)
       const indexB = ORDEN_PROCESO.indexOf(b.name)
@@ -141,21 +129,14 @@ function Dashboard() {
 
     setDatosGrafico(dataFormateada)
     setTotalServicios(total)
-  }
+  }, [datosFiltrados])
 
-  useEffect(() => { cargarEstadisticasDB() }, [])
 
-  // Controladores de los filtros de línea de tiempo
-  const cambiarAnio = (anio) => {
-    setFiltroAnio(anio)
-    if (anio === 'ALL') setFiltroMes('ALL') // Resetea mes si elige Todos los Años
-    aplicarFiltrosYAgrupar(rawServicios, anio, anio === 'ALL' ? 'ALL' : filtroMes)
-  }
-
-  const cambiarMes = (mes) => {
-    setFiltroMes(mes)
-    aplicarFiltrosYAgrupar(rawServicios, filtroAnio, mes)
-  }
+  // ================= UTILIDADES UI =================
+  const toggleFiltro = (estadoActual, setEstado, valor) => {
+    if (estadoActual.includes(valor)) setEstado(estadoActual.filter(item => item !== valor));
+    else setEstado([...estadoActual, valor]);
+  };
 
   const cardStyle = { backgroundColor: theme.bgCard, border: `1px solid ${theme.border}`, borderRadius: '12px', padding: '24px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.05)' }
   const thStyle = { padding: '14px 16px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: theme.textMuted, backgroundColor: '#F8FAFC', borderBottom: `2px solid ${theme.border}`, textAlign: 'left' }
@@ -177,6 +158,14 @@ function Dashboard() {
     <div style={{ backgroundColor: theme.bgApp, minHeight: '100vh', paddingBottom: '40px', fontFamily: "'Inter', 'Segoe UI', sans-serif" }}>
       <TopBar />
 
+      {/* OVERLAY INVISIBLE PARA CERRAR MENÚS AL HACER CLIC FUERA */}
+      {(mostrarMenuEstado || mostrarMenuPrioridad || mostrarMenuLugar) && (
+        <div 
+          style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 40 }}
+          onClick={() => { setMostrarMenuEstado(false); setMostrarMenuPrioridad(false); setMostrarMenuLugar(false); }}
+        />
+      )}
+
       <div style={{ maxWidth: '1600px', width: '95%', margin: '0 auto' }}>
         
         {/* Cabecera Principal */}
@@ -185,32 +174,94 @@ function Dashboard() {
           <p style={{ margin: 0, color: theme.textMuted, fontSize: '15px' }}>Monitoreo en tiempo real del flujo de requerimientos.</p>
         </div>
 
-        {/* LÍNEA DE TIEMPO (FILTROS) */}
-        <div style={{ backgroundColor: 'white', padding: '16px 24px', borderRadius: '12px', border: `1px solid ${theme.border}`, marginBottom: '32px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {/* BARRA DE FILTROS AVANZADA */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', marginBottom: '32px', backgroundColor: 'white', padding: '16px 24px', borderRadius: '12px', border: `1px solid ${theme.border}`, alignItems: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
           
-          {/* Selector de Años */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span style={{ fontSize: '12px', fontWeight: '800', color: theme.textMuted, textTransform: 'uppercase', width: '60px' }}>Año:</span>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <button onClick={() => cambiarAnio('ALL')} style={{ padding: '6px 16px', borderRadius: '20px', border: 'none', fontWeight: '700', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s', backgroundColor: filtroAnio === 'ALL' ? theme.primary : '#F1F5F9', color: filtroAnio === 'ALL' ? 'white' : theme.textMuted }}>Histórico Total</button>
-              {aniosDisponibles.map(anio => (
-                <button key={anio} onClick={() => cambiarAnio(anio)} style={{ padding: '6px 16px', borderRadius: '20px', border: 'none', fontWeight: '700', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s', backgroundColor: filtroAnio === anio ? theme.primary : '#F1F5F9', color: filtroAnio === anio ? 'white' : theme.textMuted }}>{anio}</button>
-              ))}
-            </div>
+          {/* Buscador */}
+          <div style={{ flex: '1', minWidth: '200px' }}>
+            <input 
+              type="text" placeholder="🔍 Buscar servicio o ID..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
+              style={{ width: '100%', padding: '10px 16px', borderRadius: '8px', border: `1px solid ${theme.border}`, fontSize: '13px', outline: 'none', backgroundColor: theme.bgApp, color: theme.textMain, boxSizing: 'border-box' }}
+            />
           </div>
 
-          {/* Selector de Meses (Solo visible si hay un Año específico seleccionado) */}
-          {filtroAnio !== 'ALL' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', paddingTop: '16px', borderTop: `1px dashed ${theme.border}` }}>
-              <span style={{ fontSize: '12px', fontWeight: '800', color: theme.textMuted, textTransform: 'uppercase', width: '60px' }}>Mes:</span>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <button onClick={() => cambiarMes('ALL')} style={{ padding: '6px 16px', borderRadius: '20px', border: 'none', fontWeight: '700', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s', backgroundColor: filtroMes === 'ALL' ? theme.accent : '#F1F5F9', color: filtroMes === 'ALL' ? 'white' : theme.textMuted }}>Todos los meses</button>
-                {MESES.map(mes => (
-                  <button key={mes.val} onClick={() => cambiarMes(mes.val)} style={{ padding: '6px 16px', borderRadius: '20px', border: 'none', fontWeight: '700', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s', backgroundColor: filtroMes === mes.val ? theme.accent : '#F1F5F9', color: filtroMes === mes.val ? 'white' : theme.textMuted }}>{mes.label}</button>
+          {/* Rango de Fechas */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 16px', borderLeft: `1px solid ${theme.border}`, borderRight: `1px solid ${theme.border}` }}>
+            <span style={{ fontSize: '13px', fontWeight: '600', color: theme.textMuted }}>📅 Del:</span>
+            <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: `1px solid ${theme.border}`, fontSize: '12px', outline: 'none' }} />
+            <span style={{ fontSize: '13px', fontWeight: '600', color: theme.textMuted }}>al</span>
+            <input type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: `1px solid ${theme.border}`, fontSize: '12px', outline: 'none' }} />
+          </div>
+
+          {/* Filtro Estado */}
+          <div style={{ position: 'relative', zIndex: mostrarMenuEstado ? 50 : 1 }}>
+            <button onClick={() => setMostrarMenuEstado(!mostrarMenuEstado)} style={{ padding: '10px 16px', backgroundColor: filtroEstado.length > 0 ? '#EFF6FF' : 'white', border: `1px solid ${filtroEstado.length > 0 ? '#BFDBFE' : theme.border}`, borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: filtroEstado.length > 0 ? theme.primary : theme.textMain }}>
+              Estado {filtroEstado.length > 0 && `(${filtroEstado.length})`} ▼
+            </button>
+            {mostrarMenuEstado && (
+              <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', backgroundColor: 'white', border: `1px solid ${theme.border}`, borderRadius: '8px', padding: '8px', width: '220px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
+                {LISTA_ESTADOS_FILTRO.map(est => (
+                  <label key={est} style={{ display: 'flex', alignItems: 'center', padding: '6px 8px', fontSize: '12px', cursor: 'pointer', borderRadius: '4px' }}>
+                    <input type="checkbox" checked={filtroEstado.includes(est)} onChange={() => toggleFiltro(filtroEstado, setFiltroEstado, est)} style={{ marginRight: '8px' }} /> {est}
+                  </label>
                 ))}
               </div>
-            </div>
+            )}
+          </div>
+
+          {/* Filtro Prioridad */}
+          <div style={{ position: 'relative', zIndex: mostrarMenuPrioridad ? 50 : 1 }}>
+            <button onClick={() => setMostrarMenuPrioridad(!mostrarMenuPrioridad)} style={{ padding: '10px 16px', backgroundColor: filtroPrioridad.length > 0 ? '#EFF6FF' : 'white', border: `1px solid ${filtroPrioridad.length > 0 ? '#BFDBFE' : theme.border}`, borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: filtroPrioridad.length > 0 ? theme.primary : theme.textMain }}>
+              Prioridad {filtroPrioridad.length > 0 && `(${filtroPrioridad.length})`} ▼
+            </button>
+            {mostrarMenuPrioridad && (
+              <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', backgroundColor: 'white', border: `1px solid ${theme.border}`, borderRadius: '8px', padding: '8px', width: '150px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
+                {['Baja', 'Media', 'Alta', 'Crítica'].map(prio => (
+                  <label key={prio} style={{ display: 'flex', alignItems: 'center', padding: '6px 8px', fontSize: '12px', cursor: 'pointer', borderRadius: '4px' }}>
+                    <input type="checkbox" checked={filtroPrioridad.includes(prio)} onChange={() => toggleFiltro(filtroPrioridad, setFiltroPrioridad, prio)} style={{ marginRight: '8px' }} /> {prio}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Filtro Lugar */}
+          <div style={{ position: 'relative', zIndex: mostrarMenuLugar ? 50 : 1 }}>
+            <button onClick={() => setMostrarMenuLugar(!mostrarMenuLugar)} style={{ padding: '10px 16px', backgroundColor: filtroLugar.length > 0 ? '#EFF6FF' : 'white', border: `1px solid ${filtroLugar.length > 0 ? '#BFDBFE' : theme.border}`, borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: filtroLugar.length > 0 ? theme.primary : theme.textMain }}>
+              Sede {filtroLugar.length > 0 && `(${filtroLugar.length})`} ▼
+            </button>
+            {mostrarMenuLugar && (
+              <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', backgroundColor: 'white', border: `1px solid ${theme.border}`, borderRadius: '8px', padding: '8px', width: '200px', maxHeight: '300px', overflowY: 'auto', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
+                {lugares.map(lug => (
+                  <label key={lug.idlugar} style={{ display: 'flex', alignItems: 'center', padding: '6px 8px', fontSize: '12px', cursor: 'pointer', borderRadius: '4px' }}>
+                    <input type="checkbox" checked={filtroLugar.includes(lug.idlugar.toString())} onChange={() => toggleFiltro(filtroLugar, setFiltroLugar, lug.idlugar.toString())} style={{ marginRight: '8px' }} /> {lug.lugarejecucion}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* BOTÓN MINIMALISTA DE SIN FECHA */}
+          <button 
+            onClick={() => setMostrarSinFecha(!mostrarSinFecha)}
+            style={{ 
+              padding: '10px 16px', 
+              backgroundColor: mostrarSinFecha ? theme.danger : (cantidadSinFecha > 0 ? '#FEF2F2' : 'white'), 
+              color: mostrarSinFecha ? 'white' : (cantidadSinFecha > 0 ? theme.danger : theme.textMain), 
+              border: `1px solid ${mostrarSinFecha ? '#B91C1C' : (cantidadSinFecha > 0 ? '#FCA5A5' : theme.border)}`, 
+              borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '13px', transition: 'all 0.2s'
+            }}
+          >
+            {mostrarSinFecha ? 'Quitar Filtro Sin Fecha' : `⚠️ Sin Fecha (${cantidadSinFecha})`}
+          </button>
+
+          {/* Limpiar Filtros Generales */}
+          {(filtroEstado.length > 0 || filtroPrioridad.length > 0 || filtroLugar.length > 0 || busqueda || fechaInicio || fechaFin) && (
+            <button onClick={() => { setFiltroEstado([]); setFiltroPrioridad([]); setFiltroLugar([]); setBusqueda(''); setFechaInicio(''); setFechaFin(''); setMostrarSinFecha(false); }} style={{ padding: '10px 16px', backgroundColor: '#FEF2F2', color: theme.danger, border: '1px solid #FCA5A5', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', fontSize: '13px', marginLeft: 'auto' }}>
+              ✕ Limpiar
+            </button>
           )}
+
         </div>
 
         {/* MENÚ RÁPIDO DE MÓDULOS */}
@@ -259,7 +310,7 @@ function Dashboard() {
               <h3 style={{ margin: '0 0 24px 0', color: theme.textMain, width: '100%', textAlign: 'left', fontSize: '18px', fontWeight: '800' }}>Distribución del Flujo de Trabajo</h3>
               
               {datosGrafico.length === 0 ? (
-                <div style={{ padding: '80px', color: theme.textMuted, fontStyle: 'italic' }}>No hay servicios en el periodo seleccionado.</div>
+                <div style={{ padding: '80px', color: theme.textMuted, fontStyle: 'italic' }}>No hay resultados para los filtros seleccionados.</div>
               ) : (
                 <div style={{ width: '100%', height: '420px' }}>
                   <ResponsiveContainer width="100%" height="100%">
@@ -324,7 +375,7 @@ function Dashboard() {
               </div>
               
               <div style={{ padding: '20px 24px', backgroundColor: theme.primary, display: 'flex', justifyContent: 'space-between', color: 'white', alignItems: 'center' }}>
-                <div style={{ fontSize: '14px', fontWeight: '600' }}>TOTAL DE SERVICIOS EN EL PERIODO:</div>
+                <div style={{ fontSize: '14px', fontWeight: '600' }}>SERVICIOS EN ESTA VISTA:</div>
                 <div style={{ fontSize: '24px', fontWeight: '900' }}>{totalServicios}</div>
               </div>
             </div>
