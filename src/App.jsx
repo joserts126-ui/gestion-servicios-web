@@ -22,5 +22,5 @@ function App() {
     </BrowserRouter>
   )
 }
-
+// Forzar limpieza de cache en Vercel
 export default App
