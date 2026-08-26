@@ -88,7 +88,7 @@ function Servicios() {
   cotizaciones(
     idcotizacion, estado, fecha_envio_cotizacion, fecha_visita_tecnica, fecharecepcion, 
     fechaaceptacion, fechainicio, fechafin, gastos_generales, utilidades, plazo_dias, entregables,
-    puntaje_eco, puntaje_plazo, puntaje_alcance, puntaje_pago, 
+    puntaje_eco, puntaje_plazo, puntaje_alcance, puntaje_pago, edicion_matriz,
     proveedor(razonsocial), 
     moneda(moneda),
     formapago(formapago),

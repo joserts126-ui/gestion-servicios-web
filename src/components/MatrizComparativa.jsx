@@ -88,10 +88,15 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
       {/* 2. TABLA CENTRAL */}
       <table id="tabla-maestra" style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: `${minContainerWidth}px` }} className="impresion-width-auto">
         <colgroup>
-          <col style={{ width: `${wItem}%` }} /> <col style={{ width: `${wDesc}%` }} /> <col style={{ width: `${wPres}%` }} />
+          <col style={{ width: `${wItem}%` }} />
+          <col style={{ width: `${wDesc}%` }} />
+          <col style={{ width: `${wPres}%` }} />
           {cotizacionesParticipantes.map(c => (
             <React.Fragment key={`cg-${c.idcotizacion}`}>
-              <col style={{ width: `${wProv * 0.15}%` }} /><col style={{ width: `${wProv * 0.20}%` }} /><col style={{ width: `${wProv * 0.30}%` }} /><col style={{ width: `${wProv * 0.35}%` }} />
+              <col style={{ width: `${wProv * 0.15}%` }} />
+              <col style={{ width: `${wProv * 0.20}%` }} />
+              <col style={{ width: `${wProv * 0.30}%` }} />
+              <col style={{ width: `${wProv * 0.35}%` }} />
             </React.Fragment>
           ))}
         </colgroup>
@@ -157,13 +162,38 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
                 const cantInput = edicionMatriz[keyEdicion]?.cant !== undefined ? edicionMatriz[keyEdicion].cant : '1.00';
                 const cantNum = parseFloat(cantInput) || 1;
                 const pu = parcial > 0 ? (parcial / cantNum).toFixed(2) : '-';
+                
+                // NUEVO: Capturamos el estado guardado del menú desplegable
+                const estadoItem = edicionMatriz[keyEdicion]?.estado || '';
 
                 return (
                   <React.Fragment key={`eco-data-${keyEdicion}`}>
                     <td style={{ ...tdCenter, padding: '2px' }}><input type="text" value={und} onChange={(e) => handleEdicionMatriz(cat.idcategoria, cot.idcotizacion, 'und', e.target.value.toUpperCase())} style={inputStyleMatriz} /></td>
                     <td style={{ ...tdCenter, padding: '2px' }}><input type="text" value={cantInput} onChange={(e) => handleEdicionMatriz(cat.idcategoria, cot.idcotizacion, 'cant', e.target.value)} style={inputStyleMatriz} /></td>
-                    <td style={tdRight}>{pu !== '-' ? `${getMoneda(cot)} ${pu}` : '-'}</td>
-                    <td style={{ ...tdRight, fontWeight: 'bold' }}>{parcial > 0 ? `${getMoneda(cot)} ${parcial.toFixed(2)}` : '-'}</td>
+                    
+                    {/* NUEVO: Lógica condicional */}
+                    {parcial > 0 ? (
+                      <>
+                        <td style={tdRight}>{`${getMoneda(cot)} ${pu}`}</td>
+                        <td style={{ ...tdRight, fontWeight: 'bold' }}>{`${getMoneda(cot)} ${parcial.toFixed(2)}`}</td>
+                      </>
+                    ) : (
+                      <td colSpan="2" style={{ ...tdCenter, padding: '2px', verticalAlign: 'middle' }}>
+                        <select 
+                          value={estadoItem} 
+                          onChange={(e) => handleEdicionMatriz(cat.idcategoria, cot.idcotizacion, 'estado', e.target.value)}
+                          style={{
+                            ...inputStyleMatriz,
+                            cursor: 'pointer',
+                            color: estadoItem === 'NO CONTEMPLA' ? '#DC2626' : (estadoItem === 'SI CONTEMPLA' ? '#16A34A' : '#64748B')
+                          }}
+                        >
+                          <option value="">- SELECCIONAR -</option>
+                          <option value="SI CONTEMPLA">SI CONTEMPLA</option>
+                          <option value="NO CONTEMPLA">NO CONTEMPLA</option>
+                        </select>
+                      </td>
+                    )}
                   </React.Fragment>
                 )
               })}

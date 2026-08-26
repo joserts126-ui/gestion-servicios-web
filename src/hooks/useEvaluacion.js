@@ -26,10 +26,19 @@ export const useEvaluacion = (servicio, onActualizado) => {
 
       let todosLosItems = [];
       let pIniciales = {};
+      let edicionInicial = {}; // <-- NUEVA VARIABLE PARA CARGAR EL JSON
 
       servicio.cotizaciones?.forEach(cot => {
         pIniciales[cot.idcotizacion] = { eco: cot.puntaje_eco || 0, plazo: cot.puntaje_plazo || 0, alcance: cot.puntaje_alcance || 0, pago: cot.puntaje_pago || 0 };
         
+        // --- NUEVO: Cargar la edición guardada en la BD ---
+        if (cot.edicion_matriz) {
+          Object.keys(cot.edicion_matriz).forEach(idCat => {
+            edicionInicial[`${idCat}-${cot.idcotizacion}`] = cot.edicion_matriz[idCat];
+          });
+        }
+        // --------------------------------------------------
+
         if(cot.detallecotizacion) {
           cot.detallecotizacion.forEach((det) => {
             const baseFila = det.cantidad * det.preciounitario;
@@ -50,6 +59,7 @@ export const useEvaluacion = (servicio, onActualizado) => {
       });
       setItemsCotizaciones(todosLosItems); 
       setPuntajesEvaluacion(pIniciales); 
+      setEdicionMatriz(edicionInicial); // <-- NUEVO: Setear el estado con los datos de la BD
       setCargando(false);
     };
     if (servicio) inicializar();
@@ -88,27 +98,63 @@ export const useEvaluacion = (servicio, onActualizado) => {
 
   const handleEdicionMatriz = (idCat, idCot, campo, valor) => { setEdicionMatriz(prev => ({ ...prev, [`${idCat}-${idCot}`]: { ...(prev[`${idCat}-${idCot}`] || {}), [campo]: valor } })); };
   const handlePuntajeChange = (idCot, campo, valor) => { const num = parseFloat(valor) || 0; setPuntajesEvaluacion(prev => ({ ...prev, [idCot]: { ...prev[idCot], [campo]: num > 5 ? 5 : (num < 0 ? 0 : num) } })); };
-    const calcularNotaIntegral = (idCot) => { 
-     const p = puntajesEvaluacion[idCot] || {}; 
-      const nota = 
-        (p.eco || 0) * PESOS_EVALUACION.economica + 
-        (p.plazo || 0) * PESOS_EVALUACION.plazo + 
-        (p.alcance || 0) * PESOS_EVALUACION.alcance + 
-        (p.pago || 0) * PESOS_EVALUACION.pago;
+  
+  const calcularNotaIntegral = (idCot) => { 
+    const p = puntajesEvaluacion[idCot] || {}; 
+    const nota = 
+      (p.eco || 0) * PESOS_EVALUACION.economica + 
+      (p.plazo || 0) * PESOS_EVALUACION.plazo + 
+      (p.alcance || 0) * PESOS_EVALUACION.alcance + 
+      (p.pago || 0) * PESOS_EVALUACION.pago;
     
-     return nota.toFixed(2); 
-    };  
+    return nota.toFixed(2); 
+  };  
+  
   const guardarMatrizEvaluacion = async () => {
     setGuardandoMatriz(true);
     try {
-      for (const id of Object.keys(puntajesEvaluacion)) {
-        const p = puntajesEvaluacion[id];
-        await supabase.from('cotizaciones').update({ puntaje_eco: p.eco, puntaje_plazo: p.plazo, puntaje_alcance: p.alcance, puntaje_pago: p.pago }).eq('idcotizacion', id);
-      }
-      alert("¡Evaluaciones guardadas con éxito!"); if (onActualizado) onActualizado();
-    } catch (error) { alert("Error al guardar."); } finally { setGuardandoMatriz(false); }
-  };
+      // Iteramos sobre las cotizaciones del servicio para asegurar que recorremos todas
+      for (const cot of servicio.cotizaciones) {
+        const idCot = cot.idcotizacion;
+        const p = puntajesEvaluacion[idCot] || {};
+        
+        // 1. Extraemos la configuración exacta de ESTE proveedor
+        const edicionDeEstaCotizacion = {};
+        Object.keys(edicionMatriz).forEach(key => {
+          const [idCat, idCotKey] = key.split('-');
+          // Forzamos ambos a texto (String) para que coincidan perfectamente
+          if (String(idCotKey) === String(idCot)) {
+            edicionDeEstaCotizacion[idCat] = edicionMatriz[key];
+          }
+        });
 
+        // 2. Guardamos y CAPTURAMOS posibles errores de Supabase
+        const { error } = await supabase.from('cotizaciones').update({ 
+          puntaje_eco: p.eco || 0, 
+          puntaje_plazo: p.plazo || 0, 
+          puntaje_alcance: p.alcance || 0, 
+          puntaje_pago: p.pago || 0,
+          edicion_matriz: edicionDeEstaCotizacion 
+        }).eq('idcotizacion', idCot);
+
+        // Si Supabase devuelve un error, forzamos que caiga en el catch
+        if (error) {
+          console.error("Error de Supabase al guardar la cotización", idCot, ":", error);
+          throw new Error(error.message); 
+        }
+      }
+      
+      alert("¡Evaluaciones y configuraciones guardadas con éxito!"); 
+      if (onActualizado) onActualizado();
+      
+    } catch (error) { 
+      console.error("Error completo:", error);
+      alert("Fallo al guardar: " + error.message); 
+    } finally { 
+      setGuardandoMatriz(false); 
+    }
+  };
+  
   return {
     cargando, categoriasHomologacion, nuevaCategoria, setNuevaCategoria, itemsSeleccionados, itemsCotizaciones, edicionMatriz, puntajesEvaluacion, guardandoMatriz,
     handleCrearCategoria, handleEliminarCategoria, toggleSeleccionItem, asignarItemsACategoria, desasignarItem, handleEdicionMatriz, handlePuntajeChange, calcularNotaIntegral, guardarMatrizEvaluacion
