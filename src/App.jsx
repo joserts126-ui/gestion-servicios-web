@@ -5,7 +5,6 @@ import Dashboard from './pages/Dashboard'
 import Servicios from './pages/Servicios'
 import Cotizaciones from './pages/Cotizaciones' // 1. Importamos la nueva pantalla
 import Proveedores from './pages/Proveedores'
-import { SpeedInsights } from "@vercel/speed-insights/react"
 
 function App() {
   return (
@@ -18,7 +17,6 @@ function App() {
         {/* 2. Añadimos la ruta dinámica con el parámetro :id */}
         <Route path="/cotizaciones/:id" element={<Cotizaciones />} />
       </Routes>
-      <Analytics />
     </BrowserRouter>
   )
 }

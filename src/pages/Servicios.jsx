@@ -77,13 +77,29 @@ function Servicios() {
 
   const cargarDatosIniciales = async () => {
     setCargando(true)
-    const { data: dataServicios } = await supabase.from('servicios').select(`
-      *, lugarejecucion(lugarejecucion), usuario(nombre), tipoinfraestructura(tipoinfraestructura),
-      tiposervicio(tiposervicio), sistema(sistema), subsistema(sub_sistema),
-      cotizaciones(idcotizacion, estado, fecha_envio_cotizacion, fecha_visita_tecnica, fecharecepcion, fechaaceptacion, fechainicio, fechafin, gastos_generales, utilidades, plazo_dias, entregables,
-      puntaje_eco, puntaje_plazo, puntaje_alcance, puntaje_pago, proveedor(razonsocial), moneda(moneda),
-      detallecotizacion(*), comentario(comentario, fecha))
-    `)
+    const { data: dataServicios, error } = await supabase.from('servicios').select(`
+  *, 
+  lugarejecucion(lugarejecucion), 
+  usuario(nombre), 
+  tipoinfraestructura(tipoinfraestructura),
+  tiposervicio(tiposervicio), 
+  sistema(sistema), 
+  subsistema(sub_sistema),
+  cotizaciones(
+    idcotizacion, estado, fecha_envio_cotizacion, fecha_visita_tecnica, fecharecepcion, 
+    fechaaceptacion, fechainicio, fechafin, gastos_generales, utilidades, plazo_dias, entregables,
+    puntaje_eco, puntaje_plazo, puntaje_alcance, puntaje_pago, 
+    proveedor(razonsocial), 
+    moneda(moneda),
+    formapago(formapago),
+    detallecotizacion(*), 
+    comentario(comentario, fecha)
+  )
+`);
+
+if (error) {
+  console.error("Error al cargar servicios:", error);
+}
     if (dataServicios) setListaServicios(dataServicios)
 
     const fetchSafe = async (query) => { const { data } = await query; return data || [] }

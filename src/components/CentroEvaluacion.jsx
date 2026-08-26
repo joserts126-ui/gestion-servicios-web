@@ -1,104 +1,27 @@
-import React, { useState, useEffect } from 'react'
-import { supabase } from '../supabase'
-import PanelAgrupacion from './PanelAgrupacion'
-import MatrizComparativa from './MatrizComparativa'
-import { exportarExcelMatriz } from '../utils/exportadorExcel' // O la ruta donde lo hayas guardado
+import React, { useState } from 'react';
+import PanelAgrupacion from './PanelAgrupacion';
+import MatrizComparativa from './MatrizComparativa';
+import { exportarExcelMatriz } from '../utils/exportadorExcel';
+import { useEvaluacion } from '../hooks/useEvaluacion'; // Asegúrate de que la ruta coincida
 
 function CentroEvaluacion({ servicio, onClose, onActualizado }) {
-  const [cargando, setCargando] = useState(true)
-  const [categoriasHomologacion, setCategoriasHomologacion] = useState([])
-  const [nuevaCategoria, setNuevaCategoria] = useState('')
-  const [itemsSeleccionados, setItemsSeleccionados] = useState([])
-  const [itemsCotizaciones, setItemsCotizaciones] = useState([])
-  
-  const [pestanaHomologacion, setPestañaHomologacion] = useState('agrupar')
-  const [edicionMatriz, setEdicionMatriz] = useState({})
-  const [puntajesEvaluacion, setPuntajesEvaluacion] = useState({})
-  const [guardandoMatriz, setGuardandoMatriz] = useState(false)
+  const {
+    cargando, categoriasHomologacion, nuevaCategoria, setNuevaCategoria, itemsSeleccionados, itemsCotizaciones,
+    edicionMatriz, puntajesEvaluacion, guardandoMatriz, handleCrearCategoria, handleEliminarCategoria,
+    toggleSeleccionItem, asignarItemsACategoria, desasignarItem, handleEdicionMatriz, handlePuntajeChange,
+    calcularNotaIntegral, guardarMatrizEvaluacion
+  } = useEvaluacion(servicio, onActualizado);
 
-  useEffect(() => {
-    const inicializar = async () => {
-      setCargando(true)
-      const [resCat, resImp] = await Promise.all([
-        supabase.from('categoriahomologacion').select('*').eq('idservicio', servicio.idservicio),
-        supabase.from('impuestos').select('*')
-      ])
-      setCategoriasHomologacion(resCat.data || [])
-      const impuestos = resImp.data || []
-
-      let todosLosItems = []
-      let pIniciales = {}
-
-      servicio.cotizaciones.forEach(cot => {
-        pIniciales[cot.idcotizacion] = { eco: cot.puntaje_eco || 0, plazo: cot.puntaje_plazo || 0, alcance: cot.puntaje_alcance || 0, pago: cot.puntaje_pago || 0 }
-        if(cot.detallecotizacion) {
-          cot.detallecotizacion.forEach((det) => {
-            const baseFila = det.cantidad * det.preciounitario
-            const tipoImpuesto = impuestos.find(i => i.idimpuestos == det.idimpuestos)?.impuesto
-            let totalFila = baseFila
-            if (tipoImpuesto === '+ IGV') totalFila = baseFila * 1.18
-            
-            todosLosItems.push({
-              ...det, proveedorNombre: cot.proveedor?.razonsocial || 'Desconocido', moneda: cot.moneda?.moneda.includes('USD') ? '$' : 'S/',
-              totalFila: totalFila, idPrimaryKey: det.iddetcot, idcotizacion: cot.idcotizacion
-            })
-          })
-        }
-      })
-      setItemsCotizaciones(todosLosItems); setPuntajesEvaluacion(pIniciales); setCargando(false);
-    }
-    if (servicio) inicializar();
-  }, [servicio])
-
-  // Lógica delegada
-  const handleCrearCategoria = async () => {
-    if(!nuevaCategoria.trim()) return
-    const { data } = await supabase.from('categoriahomologacion').insert([{ idservicio: servicio.idservicio, nombrecategoria: nuevaCategoria.trim() }]).select()
-    if(data) { setCategoriasHomologacion([...categoriasHomologacion, data[0]]); setNuevaCategoria('') }
-  }
-  const handleEliminarCategoria = async (idCategoria) => {
-    if(!window.confirm("¿Seguro que deseas eliminar esta canasta? Todos sus ítems regresarán a la bandeja de pendientes.")) return;
-    const { error } = await supabase.from('categoriahomologacion').delete().eq('idcategoria', idCategoria);
-    if (!error) {
-      setCategoriasHomologacion(categoriasHomologacion.filter(c => c.idcategoria !== idCategoria));
-      setItemsCotizaciones(itemsCotizaciones.map(item => item.idcategoria === idCategoria ? { ...item, idcategoria: null } : item));
-    }
-  }
-  const toggleSeleccionItem = (idItem) => setItemsSeleccionados(prev => prev.includes(idItem) ? prev.filter(id => id !== idItem) : [...prev, idItem])
-  const asignarItemsACategoria = async (idCategoria) => {
-    if(itemsSeleccionados.length === 0) return
-    const { error } = await supabase.from('detallecotizacion').update({ idcategoria: idCategoria }).in('iddetcot', itemsSeleccionados)
-    if(!error) {
-      setItemsCotizaciones(itemsCotizaciones.map(item => itemsSeleccionados.includes(item.idPrimaryKey) ? { ...item, idcategoria: idCategoria } : item)); setItemsSeleccionados([])
-    }
-  }
-  const desasignarItem = async (idItem) => {
-    const { error } = await supabase.from('detallecotizacion').update({ idcategoria: null }).eq('iddetcot', idItem)
-    if(!error) setItemsCotizaciones(itemsCotizaciones.map(item => item.idPrimaryKey === idItem ? { ...item, idcategoria: null } : item))
-  }
-
-  const handleEdicionMatriz = (idCat, idCot, campo, valor) => { setEdicionMatriz(prev => ({ ...prev, [`${idCat}-${idCot}`]: { ...(prev[`${idCat}-${idCot}`] || {}), [campo]: valor } })) }
-  const handlePuntajeChange = (idCot, campo, valor) => { const num = parseFloat(valor) || 0; setPuntajesEvaluacion(prev => ({ ...prev, [idCot]: { ...prev[idCot], [campo]: num > 5 ? 5 : (num < 0 ? 0 : num) } })); }
-  const calcularNotaIntegral = (idCot) => { const p = puntajesEvaluacion[idCot] || {}; return ((p.eco || 0) * 0.35 + (p.plazo || 0) * 0.35 + (p.alcance || 0) * 0.20 + (p.pago || 0) * 0.10).toFixed(2); }
-  
-  const guardarMatrizEvaluacion = async () => {
-    setGuardandoMatriz(true);
-    try {
-      for (const id of Object.keys(puntajesEvaluacion)) {
-        const p = puntajesEvaluacion[id];
-        await supabase.from('cotizaciones').update({ puntaje_eco: p.eco, puntaje_plazo: p.plazo, puntaje_alcance: p.alcance, puntaje_pago: p.pago }).eq('idcotizacion', id);
-      }
-      alert("¡Evaluaciones guardadas con éxito!"); if (onActualizado) onActualizado();
-    } catch (error) { alert("Error al guardar."); } finally { setGuardandoMatriz(false); }
-  }
+  const [pestanaHomologacion, setPestañaHomologacion] = useState('agrupar');
 
   const handleImprimir = () => window.print();
   const handleExportarExcel = () => exportarExcelMatriz(servicio.idservicio, servicio.cotizaciones?.length || 1);
 
-  if (cargando) return <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(15, 23, 42, 0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 3000, color: 'white' }}>Cargando Centro de Evaluación...</div>
-  const itemsPendientes = itemsCotizaciones.filter(i => !i.idcategoria)
+  if (cargando) return <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(15, 23, 42, 0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 3000, color: 'white' }}>Cargando Centro de Evaluación...</div>;
   
+  const itemsPendientes = itemsCotizaciones.filter(i => !i.idcategoria);
   const cotizacionesParticipantes = servicio.cotizaciones || [];
+  
   let maxNota = -1; let idGanador = null;
   cotizacionesParticipantes.forEach(cot => { const nota = parseFloat(calcularNotaIntegral(cot.idcotizacion)); if (nota > maxNota && nota > 0) { maxNota = nota; idGanador = cot.idcotizacion; } });
 
@@ -112,22 +35,13 @@ function CentroEvaluacion({ servicio, onClose, onActualizado }) {
           @media print {
             body * { visibility: hidden; }
             #area-impresion, #area-impresion * { visibility: visible; }
-            
-            /* Rompemos la jaula del modal para alinear al inicio de la hoja */
             .modal-overlay { position: absolute !important; background: transparent !important; top: 0 !important; left: 0 !important; align-items: flex-start !important; }
             .modal-cuerpo { box-shadow: none !important; margin: 0 !important; padding: 0 !important; height: auto !important; width: 100% !important; max-width: none !important; border-radius: 0 !important; }
-            
             #area-impresion { position: absolute; left: 0; top: 0; width: 100%; overflow: visible !important; padding: 0 !important; margin: 0 !important; }
-            
-            /* CLAVE: Evita que las columnas se aplasten. Mantiene la proporción real */
             .impresion-width-auto { min-width: max-content !important; width: 100% !important; }
-            
-            /* Forzamos que se impriman los colores amarillos y grises */
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             .no-print { display: none !important; }
             tr { page-break-inside: avoid; }
-            
-            /* Dejamos el tamaño en automático para que respete tu decisión de Vertical (Portrait) */
             @page { size: auto; margin: 10mm; }
           }
         `}
@@ -170,4 +84,4 @@ function CentroEvaluacion({ servicio, onClose, onActualizado }) {
     </>
   )
 }
-export default CentroEvaluacion
+export default CentroEvaluacion;
