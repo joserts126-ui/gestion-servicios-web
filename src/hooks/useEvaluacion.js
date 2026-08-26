@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabase'; // Asegúrate de que la ruta sea la correcta
+import { PESOS_EVALUACION } from '../config/reglasNegocio';
 
 export const useEvaluacion = (servicio, onActualizado) => {
   const [cargando, setCargando] = useState(true);
@@ -87,8 +88,16 @@ export const useEvaluacion = (servicio, onActualizado) => {
 
   const handleEdicionMatriz = (idCat, idCot, campo, valor) => { setEdicionMatriz(prev => ({ ...prev, [`${idCat}-${idCot}`]: { ...(prev[`${idCat}-${idCot}`] || {}), [campo]: valor } })); };
   const handlePuntajeChange = (idCot, campo, valor) => { const num = parseFloat(valor) || 0; setPuntajesEvaluacion(prev => ({ ...prev, [idCot]: { ...prev[idCot], [campo]: num > 5 ? 5 : (num < 0 ? 0 : num) } })); };
-  const calcularNotaIntegral = (idCot) => { const p = puntajesEvaluacion[idCot] || {}; return ((p.eco || 0) * 0.35 + (p.plazo || 0) * 0.35 + (p.alcance || 0) * 0.20 + (p.pago || 0) * 0.10).toFixed(2); };
-  
+    const calcularNotaIntegral = (idCot) => { 
+     const p = puntajesEvaluacion[idCot] || {}; 
+      const nota = 
+        (p.eco || 0) * PESOS_EVALUACION.economica + 
+        (p.plazo || 0) * PESOS_EVALUACION.plazo + 
+        (p.alcance || 0) * PESOS_EVALUACION.alcance + 
+        (p.pago || 0) * PESOS_EVALUACION.pago;
+    
+     return nota.toFixed(2); 
+    };  
   const guardarMatrizEvaluacion = async () => {
     setGuardandoMatriz(true);
     try {

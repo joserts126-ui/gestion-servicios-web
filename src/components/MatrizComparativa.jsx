@@ -1,48 +1,97 @@
 import React from 'react';
 import logoCentenario from '../assets/logoCentenario.png';
+import { thPdf, tdPdf, tdCenter, tdRight, rowBlack, rowYellow, borderPdf, inputStyleMatriz } from '../styles/matrizStyles.js'; 
+import { PESOS_EVALUACION, getPorcentajeTexto } from '../config/reglasNegocio.js';
 
-// Importamos todos los estilos centralizados
-import { thPdf, tdPdf, tdCenter, tdRight, rowBlack, rowYellow, borderPdf, inputStyleMatriz } from '../styles/matrizStyles'; 
+// ==========================================
+// 1. SUB-COMPONENTE: CABECERA
+// ==========================================
+const CabeceraMatriz = ({ servicio, minContainerWidth }) => (
+  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', minWidth: `${minContainerWidth}px` }} className="impresion-width-auto">
+    <div style={{ width: '100%', textAlign: 'center', position: 'relative' }}>
+      <h1 style={{ margin: '0 0 15px 0', fontSize: '16px', fontWeight: 'bold', textDecoration: 'underline' }}>COMPARATIVO DE PROPUESTAS</h1>
+      <div style={{ position: 'absolute', top: 0, right: 0, width: '180px', height: '45px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+        <img src={logoCentenario} alt="Logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+      </div>
+      <table style={{ width: '45%', fontSize: '10.5px', textAlign: 'left', marginBottom: '10px' }}>
+        <tbody>
+          <tr><td style={{ width: '70px', fontWeight: 'bold', padding: '3px' }}>Asunto</td><td style={{ padding: '3px' }}>{servicio.servicio.toUpperCase()}</td></tr>
+          <tr><td style={{ fontWeight: 'bold', padding: '3px' }}>Proyecto</td><td style={{ padding: '3px' }}>{servicio.lugarejecucion?.lugarejecucion?.toUpperCase() || '---'}</td></tr>
+          <tr><td style={{ fontWeight: 'bold', padding: '3px' }}>Fecha</td><td style={{ padding: '3px' }}>{new Date().toLocaleDateString('es-PE')}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+);
 
+// ==========================================
+// 2. SUB-COMPONENTE: TABLA FINAL RESULTADOS
+// ==========================================
+const TablaResultados = ({ cotizacionesParticipantes, calcularNotaIntegral, idGanador }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+    <table style={{ width: '60%', borderCollapse: 'collapse', marginBottom: '15px' }}>
+      <thead>
+        <tr style={rowBlack}>
+          <th style={{ ...thPdf, backgroundColor: '#000', color: '#FFF' }}>DESCRIPCIÓN</th>
+          <th style={{ ...thPdf, backgroundColor: '#000', color: '#FFF' }}>INCIDENCIA</th>
+          <th style={{ ...thPdf, backgroundColor: '#000', color: '#FFF' }}>ABREVIATURA</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td style={tdPdf}>Propuesta Económica</td><td style={tdCenter}>{getPorcentajeTexto(PESOS_EVALUACION.economica)}</td><td style={tdCenter}>PE</td></tr>
+        <tr><td style={tdPdf}>Plazos</td><td style={tdCenter}>{getPorcentajeTexto(PESOS_EVALUACION.plazo)}</td><td style={tdCenter}>PL</td></tr>
+        <tr><td style={tdPdf}>Entregables y Alcances</td><td style={tdCenter}>{getPorcentajeTexto(PESOS_EVALUACION.alcance)}</td><td style={tdCenter}>EA</td></tr>
+        <tr><td style={tdPdf}>Forma de Pago</td><td style={tdCenter}>{getPorcentajeTexto(PESOS_EVALUACION.pago)}</td><td style={tdCenter}>FP</td></tr>
+        <tr>
+          <td style={tdPdf}></td>
+          <td style={{...tdCenter, fontWeight: 'bold'}}>{getPorcentajeTexto(PESOS_EVALUACION.economica + PESOS_EVALUACION.plazo + PESOS_EVALUACION.alcance + PESOS_EVALUACION.pago)}</td>
+          <td style={tdPdf}></td>
+        </tr>
+      </tbody>
+    </table>
+    <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+      <tbody>
+        <tr>
+          <td style={{ ...tdCenter, width: '30%', fontWeight: 'bold', backgroundColor: '#5DADE2', color: '#000', border: borderPdf }}>Puntaje final</td>
+          {cotizacionesParticipantes.map(cot => (
+              <td key={`rfin-${cot.idcotizacion}`} style={{ ...tdCenter, fontWeight: 'bold', backgroundColor: '#5DADE2', color: '#000', border: borderPdf }}>{calcularNotaIntegral(cot.idcotizacion)}</td>
+          ))}
+        </tr>
+        <tr><td colSpan={cotizacionesParticipantes.length + 1} style={{ border: 'none', height: '8px' }}></td></tr>
+        <tr>
+          <td style={{ ...tdCenter, fontWeight: 'bold', backgroundColor: '#A6ACAF', color: '#000', border: borderPdf }}>POSTOR GANADOR</td>
+          {cotizacionesParticipantes.map(cot => {
+              const notaCalc = calcularNotaIntegral(cot.idcotizacion);
+              const isWinner = (cot.idcotizacion === idGanador && idGanador !== null);
+              return <td key={`rgan-${cot.idcotizacion}`} style={{ ...tdCenter, fontWeight: 'bold', backgroundColor: '#A6ACAF', color: '#000', border: borderPdf }}>{isWinner ? `${cot.proveedor?.razonsocial} (${notaCalc})` : ''}</td>
+          })}
+        </tr>
+      </tbody>
+    </table>
+  </div>
+);
+
+
+// ==========================================
+// COMPONENTE PRINCIPAL (ORQUESTADOR)
+// ==========================================
 export default function MatrizComparativa({ servicio, cotizacionesParticipantes, categoriasHomologacion, itemsCotizaciones, edicionMatriz, handleEdicionMatriz, puntajesEvaluacion, handlePuntajeChange, calcularNotaIntegral, idGanador, N, wItem, wDesc, wPres, wProv, minContainerWidth }) {
   
-  // Helper para determinar la moneda dinámicamente
   const getMoneda = (cot) => cot.moneda?.moneda?.toUpperCase().includes('USD') ? '$' : 'S/';
 
   return (
     <div id="area-impresion" style={{ backgroundColor: 'white', width: '100%', maxWidth: '1800px', flex: 1, overflow: 'auto', padding: '30px 40px', fontFamily: 'Arial, sans-serif' }}>
       
-      {/* CABECERA */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', minWidth: `${minContainerWidth}px` }} className="impresion-width-auto">
-        <div style={{ width: '100%', textAlign: 'center', position: 'relative' }}>
-          <h1 style={{ margin: '0 0 15px 0', fontSize: '16px', fontWeight: 'bold', textDecoration: 'underline' }}>COMPARATIVO DE PROPUESTAS</h1>
-          <div style={{ position: 'absolute', top: 0, right: 0, width: '180px', height: '45px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
-            <img src={logoCentenario} alt="Logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-          </div>
-          <table style={{ width: '45%', fontSize: '10.5px', textAlign: 'left', marginBottom: '10px' }}>
-            <tbody>
-              <tr><td style={{ width: '70px', fontWeight: 'bold', padding: '3px' }}>Asunto</td><td style={{ padding: '3px' }}>{servicio.servicio.toUpperCase()}</td></tr>
-              <tr><td style={{ fontWeight: 'bold', padding: '3px' }}>Proyecto</td><td style={{ padding: '3px' }}>{servicio.lugarejecucion?.lugarejecucion?.toUpperCase() || '---'}</td></tr>
-              <tr><td style={{ fontWeight: 'bold', padding: '3px' }}>Fecha</td><td style={{ padding: '3px' }}>{new Date().toLocaleDateString('es-PE')}</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* 1. LLAMAMOS AL SUB-COMPONENTE CABECERA */}
+      <CabeceraMatriz servicio={servicio} minContainerWidth={minContainerWidth} />
 
-      {/* TABLA MAESTRA */}
+      {/* 2. TABLA CENTRAL */}
       <table id="tabla-maestra" style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: `${minContainerWidth}px` }} className="impresion-width-auto">
-        
-        {/* COLGROUP PROPORCIONAL EXACTO */}
         <colgroup>
-          <col style={{ width: `${wItem}%` }} /> 
-          <col style={{ width: `${wDesc}%` }} /> 
-          <col style={{ width: `${wPres}%` }} />
+          <col style={{ width: `${wItem}%` }} /> <col style={{ width: `${wDesc}%` }} /> <col style={{ width: `${wPres}%` }} />
           {cotizacionesParticipantes.map(c => (
             <React.Fragment key={`cg-${c.idcotizacion}`}>
-              <col style={{ width: `${wProv * 0.15}%` }} />
-              <col style={{ width: `${wProv * 0.20}%` }} />
-              <col style={{ width: `${wProv * 0.30}%` }} />
-              <col style={{ width: `${wProv * 0.35}%` }} />
+              <col style={{ width: `${wProv * 0.15}%` }} /><col style={{ width: `${wProv * 0.20}%` }} /><col style={{ width: `${wProv * 0.30}%` }} /><col style={{ width: `${wProv * 0.35}%` }} />
             </React.Fragment>
           ))}
         </colgroup>
@@ -90,10 +139,7 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
             <th style={{ ...thPdf, backgroundColor: '#0070C0', color: 'white' }}>Presupuesto<br/>Objetivo y</th>
             {cotizacionesParticipantes.map(cot => (
               <React.Fragment key={`eco-head2-${cot.idcotizacion}`}>
-                <th style={{ ...thPdf, fontSize: '9.5px', padding: '8px 1px' }}>UNIDAD</th>
-                <th style={{ ...thPdf, fontSize: '9.5px', padding: '8px 1px' }}>CANTIDAD</th>
-                <th style={{ ...thPdf, fontSize: '9.5px', padding: '8px 1px' }}>P.U.</th>
-                <th style={{ ...thPdf, fontSize: '9.5px', padding: '8px 1px' }}>PARCIAL</th>
+                <th style={{ ...thPdf, fontSize: '9.5px', padding: '8px 1px' }}>UNIDAD</th><th style={{ ...thPdf, fontSize: '9.5px', padding: '8px 1px' }}>CANTIDAD</th><th style={{ ...thPdf, fontSize: '9.5px', padding: '8px 1px' }}>P.U.</th><th style={{ ...thPdf, fontSize: '9.5px', padding: '8px 1px' }}>PARCIAL</th>
               </React.Fragment>
             ))}
           </tr>
@@ -253,9 +299,7 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
             {cotizacionesParticipantes.map(cot => ( 
               <React.Fragment key={`pag-1-${cot.idcotizacion}`}>
                 <td colSpan="1" style={tdPdf}></td>
-                <td colSpan="3" style={tdCenter}>
-                  {cot.formapago?.formapago || (cot.idformapago ? 'Ver ficha' : '---')}
-                </td>
+                <td colSpan="3" style={tdCenter}>{cot.formapago?.formapago || (cot.idformapago ? 'Ver ficha' : '---')}</td>
               </React.Fragment> 
             ))}
           </tr>
@@ -270,49 +314,11 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
 
           <tr><td colSpan={3 + N*4} style={{ border: 'none', height: '35px' }}></td></tr>
 
-          {/* --- TABLA FINAL --- */}
+          {/* 3. LLAMAMOS AL SUB-COMPONENTE TABLA FINAL */}
           <tr>
-            <td colSpan={2}></td>
-            <td colSpan="1" style={{ border: 'none' }}></td>
+            <td colSpan={2}></td><td colSpan="1" style={{ border: 'none' }}></td>
             <td colSpan={N * 4}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <table style={{ width: '60%', borderCollapse: 'collapse', marginBottom: '15px' }}>
-                  <thead>
-                    <tr style={rowBlack}>
-                      <th style={{ ...thPdf, backgroundColor: '#000', color: '#FFF' }}>DESCRIPCIÓN</th>
-                      <th style={{ ...thPdf, backgroundColor: '#000', color: '#FFF' }}>INCIDENCIA</th>
-                      <th style={{ ...thPdf, backgroundColor: '#000', color: '#FFF' }}>ABREVIATURA</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr><td style={tdPdf}>Propuesta Económica</td><td style={tdCenter}>35%</td><td style={tdCenter}>PE</td></tr>
-                    <tr><td style={tdPdf}>Plazos</td><td style={tdCenter}>35%</td><td style={tdCenter}>PL</td></tr>
-                    <tr><td style={tdPdf}>Entregables y Alcances</td><td style={tdCenter}>20%</td><td style={tdCenter}>EA</td></tr>
-                    <tr><td style={tdPdf}>Forma de Pago</td><td style={tdCenter}>10%</td><td style={tdCenter}>FP</td></tr>
-                    <tr><td style={tdPdf}></td><td style={{...tdCenter, fontWeight: 'bold'}}>100%</td><td style={tdPdf}></td></tr>
-                  </tbody>
-                </table>
-                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-                  <tbody>
-                    <tr>
-                      <td style={{ ...tdCenter, width: '30%', fontWeight: 'bold', backgroundColor: '#5DADE2', color: '#000', border: borderPdf }}>Puntaje final</td>
-                      {cotizacionesParticipantes.map(cot => {
-                         const notaCalc = calcularNotaIntegral(cot.idcotizacion);
-                         return <td key={`rfin-${cot.idcotizacion}`} style={{ ...tdCenter, fontWeight: 'bold', backgroundColor: '#5DADE2', color: '#000', border: borderPdf }}>{notaCalc}</td>
-                      })}
-                    </tr>
-                    <tr><td colSpan={cotizacionesParticipantes.length + 1} style={{ border: 'none', height: '8px' }}></td></tr>
-                    <tr>
-                      <td style={{ ...tdCenter, fontWeight: 'bold', backgroundColor: '#A6ACAF', color: '#000', border: borderPdf }}>POSTOR GANADOR</td>
-                      {cotizacionesParticipantes.map(cot => {
-                         const notaCalc = calcularNotaIntegral(cot.idcotizacion);
-                         const isWinner = (cot.idcotizacion === idGanador && idGanador !== null);
-                         return <td key={`rgan-${cot.idcotizacion}`} style={{ ...tdCenter, fontWeight: 'bold', backgroundColor: '#A6ACAF', color: '#000', border: borderPdf }}>{isWinner ? cot.proveedor?.razonsocial : ''} {isWinner ? `(${notaCalc})` : ''}</td>
-                      })}
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+              <TablaResultados cotizacionesParticipantes={cotizacionesParticipantes} calcularNotaIntegral={calcularNotaIntegral} idGanador={idGanador} N={N} />
             </td>
           </tr>
 
