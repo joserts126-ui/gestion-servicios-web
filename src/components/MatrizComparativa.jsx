@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import logoCentenario from '../assets/logoCentenario.png';
 import { thPdf, tdPdf, tdCenter, tdRight, rowBlack, rowYellow, borderPdf, inputStyleMatriz } from '../styles/matrizStyles.js'; 
 import { PESOS_EVALUACION, getPorcentajeTexto } from '../config/reglasNegocio.js';
@@ -71,7 +71,6 @@ const TablaResultados = ({ cotizacionesParticipantes, calcularNotaIntegral, idGa
   </div>
 );
 
-
 // ==========================================
 // COMPONENTE PRINCIPAL (ORQUESTADOR)
 // ==========================================
@@ -79,13 +78,44 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
   
   const getMoneda = (cot) => cot.moneda?.moneda?.toUpperCase().includes('USD') ? '$' : 'S/';
 
+  // --- OPTIMIZACIÓN DE RENDIMIENTO CON useMemo ---
+  // Calculamos todos los totales financieros una sola vez al cargar la tabla 
+  // y solo se recalcularán si cambian los ítems o los participantes.
+  const totales = useMemo(() => {
+    const diccionario = {};
+    
+    cotizacionesParticipantes.forEach(cot => {
+      // 1. Costo Directo
+      const costoDirecto = itemsCotizaciones
+        .filter(i => i.idcotizacion === cot.idcotizacion && i.idcategoria)
+        .reduce((acc, curr) => acc + curr.totalFila, 0);
+      
+      // 2. Adicionales
+      const gastosGenerales = parseFloat(cot.gastos_generales || 0);
+      const utilidades = parseFloat(cot.utilidades || 0);
+      const subtotal = costoDirecto + gastosGenerales + utilidades;
+      const igv = subtotal * 0.18;
+      const total = subtotal + igv;
+
+      // 3. Guardamos en el diccionario
+      diccionario[cot.idcotizacion] = {
+        costoDirecto,
+        gastosGenerales,
+        utilidades,
+        subtotal,
+        igv,
+        total
+      };
+    });
+    
+    return diccionario;
+  }, [cotizacionesParticipantes, itemsCotizaciones]);
+
   return (
     <div id="area-impresion" style={{ backgroundColor: 'white', width: '100%', maxWidth: '1800px', flex: 1, overflow: 'auto', padding: '30px 40px', fontFamily: 'Arial, sans-serif' }}>
       
-      {/* 1. LLAMAMOS AL SUB-COMPONENTE CABECERA */}
       <CabeceraMatriz servicio={servicio} minContainerWidth={minContainerWidth} />
 
-      {/* 2. TABLA CENTRAL */}
       <table id="tabla-maestra" style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: `${minContainerWidth}px` }} className="impresion-width-auto">
         <colgroup>
           <col style={{ width: `${wItem}%` }} />
@@ -109,26 +139,21 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
           </tr>
           <tr>
             <td style={{ border: 'none' }}></td><td style={{ ...tdPdf, fontWeight: 'bold', borderLeft: borderPdf, borderRight: borderPdf }}>COSTO DIRECTO</td><td style={{ border: 'none' }}></td>
-            {cotizacionesParticipantes.map(cot => {
-              const cd = itemsCotizaciones.filter(i => i.idcotizacion === cot.idcotizacion && i.idcategoria).reduce((acc, curr) => acc + curr.totalFila, 0);
-              return <td colSpan="4" key={`top-cd-${cot.idcotizacion}`} style={{ ...tdCenter, fontWeight: 'bold' }}>{getMoneda(cot)} {cd.toFixed(2)}</td>
-            })}
+            {cotizacionesParticipantes.map(cot => (
+              <td colSpan="4" key={`top-cd-${cot.idcotizacion}`} style={{ ...tdCenter, fontWeight: 'bold' }}>{getMoneda(cot)} {totales[cot.idcotizacion].costoDirecto.toFixed(2)}</td>
+            ))}
           </tr>
           <tr>
             <td style={{ border: 'none' }}></td><td style={{ ...tdPdf, fontWeight: 'bold', borderLeft: borderPdf, borderRight: borderPdf }}>IGV</td><td style={{ border: 'none' }}></td>
-            {cotizacionesParticipantes.map(cot => {
-              const cd = itemsCotizaciones.filter(i => i.idcotizacion === cot.idcotizacion && i.idcategoria).reduce((acc, curr) => acc + curr.totalFila, 0);
-              const igv = (cd + parseFloat(cot.gastos_generales||0) + parseFloat(cot.utilidades||0)) * 0.18;
-              return <td colSpan="4" key={`top-igv-${cot.idcotizacion}`} style={tdCenter}>{getMoneda(cot)} {igv.toFixed(2)}</td>
-            })}
+            {cotizacionesParticipantes.map(cot => (
+              <td colSpan="4" key={`top-igv-${cot.idcotizacion}`} style={tdCenter}>{getMoneda(cot)} {totales[cot.idcotizacion].igv.toFixed(2)}</td>
+            ))}
           </tr>
           <tr>
             <td style={{ border: 'none' }}></td><td style={{ ...tdPdf, fontWeight: 'bold', borderLeft: borderPdf, borderRight: borderPdf }}>TOTAL</td><td style={{ border: 'none' }}></td>
-            {cotizacionesParticipantes.map(cot => {
-              const cd = itemsCotizaciones.filter(i => i.idcotizacion === cot.idcotizacion && i.idcategoria).reduce((acc, curr) => acc + curr.totalFila, 0);
-              const total = (cd + parseFloat(cot.gastos_generales||0) + parseFloat(cot.utilidades||0)) * 1.18;
-              return <td colSpan="4" key={`top-tot-${cot.idcotizacion}`} style={{ ...tdCenter, fontWeight: 'bold' }}>{getMoneda(cot)} {total.toFixed(2)}</td>
-            })}
+            {cotizacionesParticipantes.map(cot => (
+              <td colSpan="4" key={`top-tot-${cot.idcotizacion}`} style={{ ...tdCenter, fontWeight: 'bold' }}>{getMoneda(cot)} {totales[cot.idcotizacion].total.toFixed(2)}</td>
+            ))}
           </tr>
 
           <tr><td colSpan={3 + N*4} style={{ border: 'none', height: '25px' }}></td></tr>
@@ -162,8 +187,6 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
                 const cantInput = edicionMatriz[keyEdicion]?.cant !== undefined ? edicionMatriz[keyEdicion].cant : '1.00';
                 const cantNum = parseFloat(cantInput) || 1;
                 const pu = parcial > 0 ? (parcial / cantNum).toFixed(2) : '-';
-                
-                // NUEVO: Capturamos el estado guardado del menú desplegable
                 const estadoItem = edicionMatriz[keyEdicion]?.estado || '';
 
                 return (
@@ -171,7 +194,6 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
                     <td style={{ ...tdCenter, padding: '2px' }}><input type="text" value={und} onChange={(e) => handleEdicionMatriz(cat.idcategoria, cot.idcotizacion, 'und', e.target.value.toUpperCase())} style={inputStyleMatriz} /></td>
                     <td style={{ ...tdCenter, padding: '2px' }}><input type="text" value={cantInput} onChange={(e) => handleEdicionMatriz(cat.idcategoria, cot.idcotizacion, 'cant', e.target.value)} style={inputStyleMatriz} /></td>
                     
-                    {/* NUEVO: Lógica condicional */}
                     {parcial > 0 ? (
                       <>
                         <td style={tdRight}>{`${getMoneda(cot)} ${pu}`}</td>
@@ -202,42 +224,51 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
           
           <tr style={rowBlack}>
             <td style={tdCenter}>A</td><td style={tdPdf}>COSTO DIRECTO</td><td style={tdPdf}></td>
-            {cotizacionesParticipantes.map(cot => {
-              const cd = itemsCotizaciones.filter(i => i.idcotizacion === cot.idcotizacion && i.idcategoria).reduce((acc, curr) => acc + curr.totalFila, 0);
-              return <React.Fragment key={`cd-${cot.idcotizacion}`}><td colSpan="3" style={tdPdf}></td><td colSpan="1" style={tdRight}>{getMoneda(cot)} {cd.toFixed(2)}</td></React.Fragment>
-            })}
+            {cotizacionesParticipantes.map(cot => (
+              <React.Fragment key={`cd-${cot.idcotizacion}`}>
+                <td colSpan="3" style={tdPdf}></td><td colSpan="1" style={tdRight}>{getMoneda(cot)} {totales[cot.idcotizacion].costoDirecto.toFixed(2)}</td>
+              </React.Fragment>
+            ))}
           </tr>
           <tr>
             <td style={tdCenter}>A.1</td><td style={tdPdf}>GASTOS GENERALES</td><td style={tdPdf}></td>
-            {cotizacionesParticipantes.map(cot => ( <React.Fragment key={`gg-${cot.idcotizacion}`}><td colSpan="3" style={tdPdf}></td><td colSpan="1" style={tdRight}>{getMoneda(cot)} {parseFloat(cot.gastos_generales||0).toFixed(2)}</td></React.Fragment> ))}
+            {cotizacionesParticipantes.map(cot => (
+               <React.Fragment key={`gg-${cot.idcotizacion}`}>
+                 <td colSpan="3" style={tdPdf}></td><td colSpan="1" style={tdRight}>{getMoneda(cot)} {totales[cot.idcotizacion].gastosGenerales.toFixed(2)}</td>
+               </React.Fragment> 
+            ))}
           </tr>
           <tr>
             <td style={tdCenter}>A.2</td><td style={tdPdf}>UTILIDADES</td><td style={tdPdf}></td>
-            {cotizacionesParticipantes.map(cot => ( <React.Fragment key={`ut-${cot.idcotizacion}`}><td colSpan="3" style={tdPdf}></td><td colSpan="1" style={tdRight}>{getMoneda(cot)} {parseFloat(cot.utilidades||0).toFixed(2)}</td></React.Fragment> ))}
+            {cotizacionesParticipantes.map(cot => (
+               <React.Fragment key={`ut-${cot.idcotizacion}`}>
+                 <td colSpan="3" style={tdPdf}></td><td colSpan="1" style={tdRight}>{getMoneda(cot)} {totales[cot.idcotizacion].utilidades.toFixed(2)}</td>
+               </React.Fragment> 
+            ))}
           </tr>
           <tr style={rowBlack}>
             <td style={tdCenter}>B</td><td style={tdPdf}>SUB TOTAL</td><td style={tdPdf}></td>
-            {cotizacionesParticipantes.map(cot => {
-              const cd = itemsCotizaciones.filter(i => i.idcotizacion === cot.idcotizacion && i.idcategoria).reduce((acc, curr) => acc + curr.totalFila, 0);
-              const sub = cd + parseFloat(cot.gastos_generales||0) + parseFloat(cot.utilidades||0);
-              return <React.Fragment key={`sb-${cot.idcotizacion}`}><td colSpan="3" style={tdPdf}></td><td colSpan="1" style={tdRight}>{getMoneda(cot)} {sub.toFixed(2)}</td></React.Fragment>
-            })}
+            {cotizacionesParticipantes.map(cot => (
+              <React.Fragment key={`sb-${cot.idcotizacion}`}>
+                <td colSpan="3" style={tdPdf}></td><td colSpan="1" style={tdRight}>{getMoneda(cot)} {totales[cot.idcotizacion].subtotal.toFixed(2)}</td>
+              </React.Fragment>
+            ))}
           </tr>
           <tr>
             <td style={tdCenter}>B.1</td><td style={tdPdf}>IGV (18%)</td><td style={tdPdf}></td>
-            {cotizacionesParticipantes.map(cot => {
-              const cd = itemsCotizaciones.filter(i => i.idcotizacion === cot.idcotizacion && i.idcategoria).reduce((acc, curr) => acc + curr.totalFila, 0);
-              const igv = (cd + parseFloat(cot.gastos_generales||0) + parseFloat(cot.utilidades||0)) * 0.18;
-              return <React.Fragment key={`igv-${cot.idcotizacion}`}><td colSpan="2" style={tdPdf}></td><td colSpan="1" style={tdRight}>18%</td><td colSpan="1" style={tdRight}>{getMoneda(cot)} {igv.toFixed(2)}</td></React.Fragment>
-            })}
+            {cotizacionesParticipantes.map(cot => (
+              <React.Fragment key={`igv-${cot.idcotizacion}`}>
+                <td colSpan="2" style={tdPdf}></td><td colSpan="1" style={tdRight}>18%</td><td colSpan="1" style={tdRight}>{getMoneda(cot)} {totales[cot.idcotizacion].igv.toFixed(2)}</td>
+              </React.Fragment>
+            ))}
           </tr>
           <tr style={rowBlack}>
             <td style={tdCenter}>C</td><td style={tdPdf}>TOTAL</td><td style={tdPdf}></td>
-            {cotizacionesParticipantes.map(cot => {
-              const cd = itemsCotizaciones.filter(i => i.idcotizacion === cot.idcotizacion && i.idcategoria).reduce((acc, curr) => acc + curr.totalFila, 0);
-              const total = (cd + parseFloat(cot.gastos_generales||0) + parseFloat(cot.utilidades||0)) * 1.18;
-              return <React.Fragment key={`tot-${cot.idcotizacion}`}><td colSpan="3" style={tdPdf}></td><td colSpan="1" style={tdRight}>{getMoneda(cot)} {total.toFixed(2)}</td></React.Fragment>
-            })}
+            {cotizacionesParticipantes.map(cot => (
+              <React.Fragment key={`tot-${cot.idcotizacion}`}>
+                <td colSpan="3" style={tdPdf}></td><td colSpan="1" style={tdRight}>{getMoneda(cot)} {totales[cot.idcotizacion].total.toFixed(2)}</td>
+              </React.Fragment>
+            ))}
           </tr>
           <tr style={rowYellow}>
             <td colSpan="2" style={tdPdf}>PUNTAJE - EVALUACIÓN ECONÓMICA</td><td style={tdCenter}>5.00</td>

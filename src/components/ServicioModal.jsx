@@ -9,72 +9,79 @@ function ServicioModal({
   
   const [guardando, setGuardando] = useState(false)
 
-  // Estados del Formulario
-  const [nombreServicio, setNombreServicio] = useState('')
-  const [detalleServicio, setDetalleServicio] = useState('')
-  const [idLugar, setIdLugar] = useState('')
-  const [estadoServicio, setEstadoServicio] = useState('PENDIENTE')
-  const [prioridad, setPrioridad] = useState('Media')
-  const [numRequerimiento, setNumRequerimiento] = useState('')
-  const [fechaRequerimiento, setFechaRequerimiento] = useState('')
-  const [fechaSolicitud, setFechaSolicitud] = useState('') 
-  const [ordenCompra, setOrdenCompra] = useState('')
-  const [solped, setSolped] = useState('')
-  const [fechaSolped, setFechaSolped] = useState('')
-  const [progreso, setProgreso] = useState(0)
-  const [idTipoInfraestructura, setIdTipoInfraestructura] = useState('')
-  const [idTipoServicio, setIdTipoServicio] = useState('')
-  const [idSistema, setIdSistema] = useState('')
-  const [idSubsistema, setIdSubsistema] = useState('')
-  const [responsable, setResponsable] = useState('')
+  // OPTIMIZACIÓN: Un solo estado (formData) para todo el formulario en lugar de 15+ variables
+  const [formData, setFormData] = useState({
+    servicio: '', detalle: '', idlugar: '', estado: 'PENDIENTE', prioridad: 'Media',
+    num_requerimiento: '', fecharequerimiento: '', fechasolicitud: '', orden_compra: '',
+    solped: '', fechasolped: '', progreso: 0, idtipo: '', idtiposervicio: '',
+    idsistema: '', idsubsistema: '', responsable: ''
+  });
 
-  // Cargar datos si estamos en Modo Edición
+  // Manejador dinámico para CUALQUIER input del formulario
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  // Cargar datos al abrir el modal (para crear o editar)
   useEffect(() => {
     if (visible) {
       if (modoEdicion && servicioAEditar) {
-        setNombreServicio(servicioAEditar.servicio || '')
-        setDetalleServicio(servicioAEditar.detalle || '')
-        setIdLugar(servicioAEditar.idlugar || '')
-        setEstadoServicio(servicioAEditar.estado || 'PENDIENTE')
-        setPrioridad(servicioAEditar.prioridad || 'Media')
-        setNumRequerimiento(servicioAEditar.num_requerimiento || '')
-        setFechaRequerimiento(servicioAEditar.fecharequerimiento || '')
-        setFechaSolicitud(servicioAEditar.fechasolicitud || '')
-        setOrdenCompra(servicioAEditar.orden_compra || '')
-        setSolped(servicioAEditar.solped || '')
-        setFechaSolped(servicioAEditar.fechasolped || '')
-        setProgreso(servicioAEditar.progreso || 0)
-        setIdTipoInfraestructura(servicioAEditar.idtipo || '')
-        setIdTipoServicio(servicioAEditar.idtiposervicio || '')
-        setIdSistema(servicioAEditar.idsistema || '')
-        setIdSubsistema(servicioAEditar.idsubsistema || '')
-        setResponsable(servicioAEditar.responsable || '')
+        setFormData({
+          servicio: servicioAEditar.servicio || '',
+          detalle: servicioAEditar.detalle || '',
+          idlugar: servicioAEditar.idlugar || '',
+          estado: servicioAEditar.estado || 'PENDIENTE',
+          prioridad: servicioAEditar.prioridad || 'Media',
+          num_requerimiento: servicioAEditar.num_requerimiento || '',
+          fecharequerimiento: servicioAEditar.fecharequerimiento || '',
+          fechasolicitud: servicioAEditar.fechasolicitud || '',
+          orden_compra: servicioAEditar.orden_compra || '',
+          solped: servicioAEditar.solped || '',
+          fechasolped: servicioAEditar.fechasolped || '',
+          progreso: servicioAEditar.progreso || 0,
+          idtipo: servicioAEditar.idtipo || '',
+          idtiposervicio: servicioAEditar.idtiposervicio || '',
+          idsistema: servicioAEditar.idsistema || '',
+          idsubsistema: servicioAEditar.idsubsistema || '',
+          responsable: servicioAEditar.responsable || ''
+        });
       } else {
-        // Limpiar para Nuevo Servicio
-        setNombreServicio(''); setDetalleServicio(''); setIdLugar(''); setEstadoServicio('PENDIENTE');
-        setPrioridad('Media'); setNumRequerimiento(''); setFechaRequerimiento(''); 
-        setFechaSolicitud(new Date().toISOString().split('T')[0]);
-        setOrdenCompra(''); setSolped(''); setFechaSolped(''); setProgreso(0); 
-        setIdTipoInfraestructura(''); setIdTipoServicio(''); setIdSistema(''); setIdSubsistema(''); setResponsable('');
+        // Limpiar para un Nuevo Servicio
+        setFormData({
+          servicio: '', detalle: '', idlugar: '', estado: 'PENDIENTE', prioridad: 'Media',
+          num_requerimiento: '', fecharequerimiento: '', fechasolicitud: new Date().toISOString().split('T')[0], 
+          orden_compra: '', solped: '', fechasolped: '', progreso: 0, idtipo: '', 
+          idtiposervicio: '', idsistema: '', idsubsistema: '', responsable: ''
+        });
       }
     }
-  }, [visible, modoEdicion, servicioAEditar])
+  }, [visible, modoEdicion, servicioAEditar]);
 
   if (!visible) return null
 
   const handleGuardar = async (e) => {
     e.preventDefault()
-    if (progreso < 0 || progreso > 100) { alert("El progreso debe ser un número entre 0 y 100"); return }
+    if (formData.progreso < 0 || formData.progreso > 100) { alert("El progreso debe ser un número entre 0 y 100"); return }
     setGuardando(true)
     
+    // Formatear los datos antes de enviar a Supabase (convertir vacíos a null)
     const datosGuardar = { 
-      servicio: nombreServicio, detalle: detalleServicio, idlugar: idLugar || null, 
-      estado: estadoServicio, prioridad: prioridad, num_requerimiento: numRequerimiento || null, 
-      fecharequerimiento: fechaRequerimiento || null, fechasolicitud: fechaSolicitud || null,
-      orden_compra: ordenCompra || null, solped: solped || null, fechasolped: fechaSolped || null,
-      progreso: parseInt(progreso), idtipo: idTipoInfraestructura || null, idtiposervicio: idTipoServicio || null,
-      idsistema: idSistema || null, idsubsistema: idSubsistema || null, responsable: responsable || null
-    }
+      ...formData,
+      idlugar: formData.idlugar || null, 
+      num_requerimiento: formData.num_requerimiento || null, 
+      fecharequerimiento: formData.fecharequerimiento || null, 
+      fechasolicitud: formData.fechasolicitud || null,
+      orden_compra: formData.orden_compra || null, 
+      solped: formData.solped || null, 
+      fechasolped: formData.fechasolped || null,
+      progreso: parseInt(formData.progreso) || 0, 
+      idtipo: formData.idtipo || null, 
+      idtiposervicio: formData.idtiposervicio || null,
+      idsistema: formData.idsistema || null, 
+      idsubsistema: formData.idsubsistema || null, 
+      responsable: formData.responsable || null
+    };
 
     let errorQuery = null
     if (modoEdicion) {
@@ -103,7 +110,7 @@ function ServicioModal({
           <h3 style={{ margin: 0, color: theme.textMain, fontSize: '18px', fontWeight: '700' }}>{modoEdicion ? `Gestión de Servicio #${servicioAEditar?.idservicio}` : 'Registrar Nuevo Servicio'}</h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             {modoEdicion && (
-              <select value={estadoServicio} onChange={(e) => setEstadoServicio(e.target.value)} style={{ padding: '6px 12px', borderRadius: '6px', border: `1px solid ${theme.border}`, fontWeight: '700', backgroundColor: theme.inputBg, color: theme.textMain, fontSize: '13px' }}>
+              <select name="estado" value={formData.estado} onChange={handleChange} style={{ padding: '6px 12px', borderRadius: '6px', border: `1px solid ${theme.border}`, fontWeight: '700', backgroundColor: theme.inputBg, color: theme.textMain, fontSize: '13px' }}>
                 <option value="PENDIENTE">PENDIENTE</option>
                 <option value="COTIZACIÓN">COTIZACIÓN</option>
                 <option value="ESPERA DE APROBACION">ESPERA DE APROBACION</option>
@@ -121,58 +128,121 @@ function ServicioModal({
 
         <form onSubmit={handleGuardar} style={{ padding: '24px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+            
             {/* COLUMNA 1: DATOS TÉCNICOS */}
             <div style={{ backgroundColor: theme.bgCard, border: `1px solid ${theme.border}`, borderRadius: '8px', padding: '20px' }}>
               <h4 style={{ margin: '0 0 16px 0', color: theme.primary, fontSize: '14px', borderBottom: `1px solid ${theme.border}`, paddingBottom: '8px' }}>1. Identificación y Clasificación</h4>
-              <div style={{ marginBottom: '12px' }}><label style={labelStyle}>Nombre del Servicio *</label><input type="text" required value={nombreServicio} onChange={(e) => setNombreServicio(e.target.value)} style={inputStyle} /></div>
+              
+              <div style={{ marginBottom: '12px' }}>
+                <label style={labelStyle}>Nombre del Servicio *</label>
+                <input type="text" name="servicio" required value={formData.servicio} onChange={handleChange} style={inputStyle} />
+              </div>
               
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-                <div><label style={labelStyle}>Fecha Creación</label><input type="date" value={fechaSolicitud} onChange={(e) => setFechaSolicitud(e.target.value)} style={inputStyle} /></div>
-                <div><label style={labelStyle}>Prioridad</label><select value={prioridad} onChange={(e) => setPrioridad(e.target.value)} style={inputStyle}><option value="Baja">Baja</option><option value="Media">Media</option><option value="Alta">Alta</option><option value="Crítica">Crítica</option></select></div>
+                <div>
+                  <label style={labelStyle}>Fecha Creación</label>
+                  <input type="date" name="fechasolicitud" value={formData.fechasolicitud} onChange={handleChange} style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Prioridad</label>
+                  <select name="prioridad" value={formData.prioridad} onChange={handleChange} style={inputStyle}>
+                    <option value="Baja">Baja</option><option value="Media">Media</option><option value="Alta">Alta</option><option value="Crítica">Crítica</option>
+                  </select>
+                </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-                <div><label style={labelStyle}>Infraestructura</label><select value={idTipoInfraestructura} onChange={(e) => setIdTipoInfraestructura(e.target.value)} style={inputStyle}><option value="">-- Seleccionar --</option>{tiposInfraestructura.map(t => <option key={t.idtipo} value={t.idtipo}>{t.tipoinfraestructura}</option>)}</select></div>
-                <div><label style={labelStyle}>Tipo de Servicio</label><select value={idTipoServicio} onChange={(e) => setIdTipoServicio(e.target.value)} style={inputStyle}><option value="">-- Seleccionar --</option>{tiposServicio.map(t => <option key={t.idtiposervicio} value={t.idtiposervicio}>{t.tiposervicio}</option>)}</select></div>
+                <div>
+                  <label style={labelStyle}>Infraestructura</label>
+                  <select name="idtipo" value={formData.idtipo} onChange={handleChange} style={inputStyle}>
+                    <option value="">-- Seleccionar --</option>
+                    {tiposInfraestructura.map(t => <option key={t.idtipo} value={t.idtipo}>{t.tipoinfraestructura}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Tipo de Servicio</label>
+                  <select name="idtiposervicio" value={formData.idtiposervicio} onChange={handleChange} style={inputStyle}>
+                    <option value="">-- Seleccionar --</option>
+                    {tiposServicio.map(t => <option key={t.idtiposervicio} value={t.idtiposervicio}>{t.tiposervicio}</option>)}
+                  </select>
+                </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-                <div><label style={labelStyle}>Sistema</label><select value={idSistema} onChange={(e) => setIdSistema(e.target.value)} style={inputStyle}><option value="">-- Seleccionar --</option>{sistemas.map(s => <option key={s.idsistema} value={s.idsistema}>{s.sistema}</option>)}</select></div>
-                <div><label style={labelStyle}>Subsistema</label><select value={idSubsistema} onChange={(e) => setIdSubsistema(e.target.value)} style={inputStyle}><option value="">-- Seleccionar --</option>{subsistemas.map(s => <option key={s.idsubsistema} value={s.idsubsistema}>{s.sub_sistema}</option>)}</select></div>
+                <div>
+                  <label style={labelStyle}>Sistema</label>
+                  <select name="idsistema" value={formData.idsistema} onChange={handleChange} style={inputStyle}>
+                    <option value="">-- Seleccionar --</option>
+                    {sistemas.map(s => <option key={s.idsistema} value={s.idsistema}>{s.sistema}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Subsistema</label>
+                  <select name="idsubsistema" value={formData.idsubsistema} onChange={handleChange} style={inputStyle}>
+                    <option value="">-- Seleccionar --</option>
+                    {subsistemas.map(s => <option key={s.idsubsistema} value={s.idsubsistema}>{s.sub_sistema}</option>)}
+                  </select>
+                </div>
               </div>
 
               <div style={{ marginBottom: '12px' }}>
                 <label style={labelStyle}>Lugar de Ejecución</label>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <select value={idLugar} onChange={(e) => setIdLugar(e.target.value)} style={{ ...inputStyle, flex: 1 }}><option value="">-- Seleccionar --</option>{lugares.map(l => <option key={l.idlugar} value={l.idlugar}>{l.lugarejecucion}</option>)}</select>
+                  <select name="idlugar" value={formData.idlugar} onChange={handleChange} style={{ ...inputStyle, flex: 1 }}>
+                    <option value="">-- Seleccionar --</option>
+                    {lugares.map(l => <option key={l.idlugar} value={l.idlugar}>{l.lugarejecucion}</option>)}
+                  </select>
                   <button type="button" onClick={onAbrirNuevoLugar} style={{ padding: '0 12px', backgroundColor: '#EFF6FF', color: theme.primary, border: `1px solid #BFDBFE`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '700' }}>+</button>
                 </div>
               </div>
-              <div><label style={labelStyle}>Detalles / Alcance</label><textarea value={detalleServicio} onChange={(e) => setDetalleServicio(e.target.value)} rows="2" style={{ ...inputStyle, resize: 'none' }}></textarea></div>
+              
+              <div>
+                <label style={labelStyle}>Detalles / Alcance</label>
+                <textarea name="detalle" value={formData.detalle} onChange={handleChange} rows="2" style={{ ...inputStyle, resize: 'none' }}></textarea>
+              </div>
             </div>
 
             {/* COLUMNA 2: CONTROL DOCUMENTAL */}
             <div style={{ backgroundColor: theme.bgCard, border: `1px solid ${theme.border}`, borderRadius: '8px', padding: '20px' }}>
               <h4 style={{ margin: '0 0 16px 0', color: theme.primary, fontSize: '14px', borderBottom: `1px solid ${theme.border}`, paddingBottom: '8px' }}>2. Control Documental y Avance</h4>
-              <div style={{ marginBottom: '12px' }}><label style={labelStyle}>Responsable Asignado</label><input type="text" value={responsable} onChange={(e) => setResponsable(e.target.value)} style={inputStyle} /></div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-                <div><label style={labelStyle}>Nº Requerimiento</label><input type="text" value={numRequerimiento} onChange={(e) => setNumRequerimiento(e.target.value)} style={inputStyle} /></div>
-                <div><label style={labelStyle}>Fecha de Req.</label><input type="date" value={fechaRequerimiento} onChange={(e) => setFechaRequerimiento(e.target.value)} style={inputStyle} /></div>
+              
+              <div style={{ marginBottom: '12px' }}>
+                <label style={labelStyle}>Responsable Asignado</label>
+                <input type="text" name="responsable" value={formData.responsable} onChange={handleChange} style={inputStyle} />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-                <div><label style={labelStyle}>Solped SAP</label><input type="text" value={solped} onChange={(e) => setSolped(e.target.value)} style={inputStyle} /></div>
-                <div><label style={labelStyle}>Fecha Solped</label><input type="date" value={fechaSolped} onChange={(e) => setFechaSolped(e.target.value)} style={inputStyle} /></div>
+                <div>
+                  <label style={labelStyle}>Nº Requerimiento</label>
+                  <input type="text" name="num_requerimiento" value={formData.num_requerimiento} onChange={handleChange} style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Fecha de Req.</label>
+                  <input type="date" name="fecharequerimiento" value={formData.fecharequerimiento} onChange={handleChange} style={inputStyle} />
+                </div>
               </div>
 
-              <div style={{ marginBottom: '16px' }}><label style={labelStyle}>Orden de Compra (OC)</label><input type="text" value={ordenCompra} onChange={(e) => setOrdenCompra(e.target.value)} style={inputStyle} /></div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <div>
+                  <label style={labelStyle}>Solped SAP</label>
+                  <input type="text" name="solped" value={formData.solped} onChange={handleChange} style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Fecha Solped</label>
+                  <input type="date" name="fechasolped" value={formData.fechasolped} onChange={handleChange} style={inputStyle} />
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={labelStyle}>Orden de Compra (OC)</label>
+                <input type="text" name="orden_compra" value={formData.orden_compra} onChange={handleChange} style={inputStyle} />
+              </div>
 
               <div style={{ padding: '12px', backgroundColor: '#F1F5F9', borderRadius: '6px', border: `1px dashed ${theme.border}` }}>
                 <label style={labelStyle}>Progreso Físico de Avance (%)</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <input type="range" min="0" max="100" value={progreso} onChange={(e) => setProgreso(e.target.value)} style={{ flex: 1, accentColor: theme.primary }} />
-                  <input type="number" min="0" max="100" value={progreso} onChange={(e) => setProgreso(e.target.value)} style={{ ...inputStyle, width: '70px', textAlign: 'center', fontWeight: 'bold', padding: '6px' }} />
+                  <input type="range" name="progreso" min="0" max="100" value={formData.progreso} onChange={handleChange} style={{ flex: 1, accentColor: theme.primary }} />
+                  <input type="number" name="progreso" min="0" max="100" value={formData.progreso} onChange={handleChange} style={{ ...inputStyle, width: '70px', textAlign: 'center', fontWeight: 'bold', padding: '6px' }} />
                   <span style={{fontWeight: 'bold', color: theme.textMuted, fontSize: '13px'}}>%</span>
                 </div>
               </div>

@@ -3,6 +3,7 @@ import PanelAgrupacion from './PanelAgrupacion';
 import MatrizComparativa from './MatrizComparativa';
 import { exportarExcelMatriz } from '../utils/exportadorExcel';
 import { useEvaluacion } from '../hooks/useEvaluacion'; // Asegúrate de que la ruta coincida
+import '../styles/centroEvaluacion.css'; // <-- NUEVO: Importamos los estilos limpios
 
 function CentroEvaluacion({ servicio, onClose, onActualizado }) {
   const {
@@ -17,75 +18,94 @@ function CentroEvaluacion({ servicio, onClose, onActualizado }) {
   const handleImprimir = () => window.print();
   const handleExportarExcel = () => exportarExcelMatriz(servicio.idservicio, servicio.cotizaciones?.length || 1);
 
-  if (cargando) return <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(15, 23, 42, 0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 3000, color: 'white' }}>Cargando Centro de Evaluación...</div>;
+  if (cargando) {
+    return (
+      <div className="ce-modal-overlay">
+        <div className="ce-loading-text">Cargando Centro de Evaluación...</div>
+      </div>
+    );
+  }
   
   const itemsPendientes = itemsCotizaciones.filter(i => !i.idcategoria);
   
-  // NUEVO: Filtramos las cotizaciones antes de enviarlas a la matriz y calcular al ganador
+  // Filtro que agregamos previamente
   const cotizacionesParticipantes = (servicio.cotizaciones || []).filter(
     cot => cot.estado !== 'Rechazada' && cot.estado !== 'De Baja'
   );
   
   let maxNota = -1; let idGanador = null;
-  cotizacionesParticipantes.forEach(cot => { const nota = parseFloat(calcularNotaIntegral(cot.idcotizacion)); if (nota > maxNota && nota > 0) { maxNota = nota; idGanador = cot.idcotizacion; } });
+  cotizacionesParticipantes.forEach(cot => { 
+    const nota = parseFloat(calcularNotaIntegral(cot.idcotizacion)); 
+    if (nota > maxNota && nota > 0) { maxNota = nota; idGanador = cot.idcotizacion; } 
+  });
 
   const N = cotizacionesParticipantes.length || 1;
   const minContainerWidth = Math.max(1400, N * 400 + 400);
 
   return (
-    <>
-      <style>
-        {`
-          @media print {
-            body * { visibility: hidden; }
-            #area-impresion, #area-impresion * { visibility: visible; }
-            .modal-overlay { position: absolute !important; background: transparent !important; top: 0 !important; left: 0 !important; align-items: flex-start !important; }
-            .modal-cuerpo { box-shadow: none !important; margin: 0 !important; padding: 0 !important; height: auto !important; width: 100% !important; max-width: none !important; border-radius: 0 !important; }
-            #area-impresion { position: absolute; left: 0; top: 0; width: 100%; overflow: visible !important; padding: 0 !important; margin: 0 !important; }
-            .impresion-width-auto { min-width: max-content !important; width: 100% !important; }
-            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-            .no-print { display: none !important; }
-            tr { page-break-inside: avoid; }
-            @page { size: auto; margin: 10mm; }
-          }
-        `}
-      </style>
-
-      <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(15, 23, 42, 0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 3000, backdropFilter: 'blur(4px)' }}>
-        <div className="modal-cuerpo" style={{ backgroundColor: '#F8FAFC', borderRadius: '16px', width: '98%', maxWidth: '1600px', height: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
-          
-          <div className="no-print" style={{ padding: '20px 30px 0 30px', backgroundColor: '#FFF', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-            <div>
-              <h2 style={{ margin: '0 0 5px 0', fontSize: '20px', color: '#1E293B' }}>⚖️ Centro de Homologación y Evaluación</h2>
-              <p style={{ margin: '0 0 20px 0', fontSize: '14px', color: '#64748B' }}>Servicio #{servicio.idservicio} - {servicio.servicio}</p>
-              <div style={{ display: 'flex', gap: '20px' }}>
-                <button onClick={() => setPestañaHomologacion('agrupar')} style={{ padding: '10px 20px', backgroundColor: 'transparent', border: 'none', borderBottom: pestanaHomologacion === 'agrupar' ? '3px solid #2563EB' : '3px solid transparent', color: pestanaHomologacion === 'agrupar' ? '#2563EB' : '#64748B', fontWeight: '700', fontSize: '14px', cursor: 'pointer' }}>Paso 1: Agrupar Canastas</button>
-                <button onClick={() => setPestañaHomologacion('evaluar')} disabled={itemsPendientes.length > 0} style={{ padding: '10px 20px', backgroundColor: 'transparent', border: 'none', borderBottom: pestanaHomologacion === 'evaluar' ? '3px solid #2563EB' : '3px solid transparent', color: pestanaHomologacion === 'evaluar' ? '#2563EB' : (itemsPendientes.length > 0 ? '#CBD5E1' : '#64748B'), fontWeight: '700', fontSize: '14px', cursor: itemsPendientes.length > 0 ? 'not-allowed' : 'pointer' }}>Paso 2: Matriz Comparativa</button>
-              </div>
+    <div className="ce-modal-overlay">
+      <div className="ce-modal-cuerpo">
+        
+        {/* CABECERA (Oculta al imprimir) */}
+        <div className="ce-header no-print">
+          <div>
+            <h2 className="ce-title">⚖️ Centro de Homologación y Evaluación</h2>
+            <p className="ce-subtitle">Servicio #{servicio.idservicio} - {servicio.servicio}</p>
+            <div className="ce-tabs-container">
+              <button 
+                className={`ce-btn-tab ${pestanaHomologacion === 'agrupar' ? 'active' : ''}`}
+                onClick={() => setPestañaHomologacion('agrupar')}
+              >
+                Paso 1: Agrupar Canastas
+              </button>
+              <button 
+                className={`ce-btn-tab ${pestanaHomologacion === 'evaluar' ? 'active' : ''}`}
+                onClick={() => setPestañaHomologacion('evaluar')} 
+                disabled={itemsPendientes.length > 0} 
+              >
+                Paso 2: Matriz Comparativa
+              </button>
             </div>
-            <button onClick={onClose} style={{ marginBottom: '20px', padding: '10px 20px', backgroundColor: '#1E293B', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>Cerrar Panel</button>
           </div>
-
-          {pestanaHomologacion === 'agrupar' && <PanelAgrupacion itemsPendientes={itemsPendientes} itemsSeleccionados={itemsSeleccionados} toggleSeleccionItem={toggleSeleccionItem} categoriasHomologacion={categoriasHomologacion} nuevaCategoria={nuevaCategoria} setNuevaCategoria={setNuevaCategoria} handleCrearCategoria={handleCrearCategoria} handleEliminarCategoria={handleEliminarCategoria} asignarItemsACategoria={asignarItemsACategoria} itemsCotizaciones={itemsCotizaciones} desasignarItem={desasignarItem} />}
-          
-          {pestanaHomologacion === 'evaluar' && (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#525659', overflow: 'hidden', padding: '20px', alignItems: 'center' }}>
-              
-              <MatrizComparativa servicio={servicio} cotizacionesParticipantes={cotizacionesParticipantes} categoriasHomologacion={categoriasHomologacion} itemsCotizaciones={itemsCotizaciones} edicionMatriz={edicionMatriz} handleEdicionMatriz={handleEdicionMatriz} puntajesEvaluacion={puntajesEvaluacion} handlePuntajeChange={handlePuntajeChange} calcularNotaIntegral={calcularNotaIntegral} idGanador={idGanador} N={N} wItem={4} wDesc={28} wPres={8} wProv={60/N} minContainerWidth={minContainerWidth} />
-              
-              <div className="no-print" style={{ width: '100%', padding: '15px 30px', backgroundColor: '#FFF', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <button onClick={handleImprimir} style={{ padding: '10px 20px', backgroundColor: '#DC2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>🖨️ Imprimir / Guardar PDF</button>
-                  <button onClick={handleExportarExcel} style={{ padding: '10px 20px', backgroundColor: '#16A34A', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>📊 Descargar Excel</button>
-                </div>
-                <button onClick={guardarMatrizEvaluacion} disabled={guardandoMatriz} style={{ padding: '12px 24px', backgroundColor: '#2563EB', color: 'white', border: 'none', borderRadius: '8px', cursor: guardandoMatriz ? 'wait' : 'pointer', fontWeight: '700', fontSize: '16px' }}>{guardandoMatriz ? 'Guardando...' : '💾 Confirmar Evaluación'}</button>
-              </div>
-            </div>
-          )}
-
+          <button onClick={onClose} className="ce-btn-close">Cerrar Panel</button>
         </div>
+
+        {/* PESTAÑA 1: AGRUPACIÓN */}
+        {pestanaHomologacion === 'agrupar' && (
+          <PanelAgrupacion itemsPendientes={itemsPendientes} itemsSeleccionados={itemsSeleccionados} toggleSeleccionItem={toggleSeleccionItem} categoriasHomologacion={categoriasHomologacion} nuevaCategoria={nuevaCategoria} setNuevaCategoria={setNuevaCategoria} handleCrearCategoria={handleCrearCategoria} handleEliminarCategoria={handleEliminarCategoria} asignarItemsACategoria={asignarItemsACategoria} itemsCotizaciones={itemsCotizaciones} desasignarItem={desasignarItem} />
+        )}
+        
+        {/* PESTAÑA 2: EVALUACIÓN Y MATRIZ */}
+        {pestanaHomologacion === 'evaluar' && (
+          <div className="ce-matriz-wrapper">
+            
+            <MatrizComparativa servicio={servicio} cotizacionesParticipantes={cotizacionesParticipantes} categoriasHomologacion={categoriasHomologacion} itemsCotizaciones={itemsCotizaciones} edicionMatriz={edicionMatriz} handleEdicionMatriz={handleEdicionMatriz} puntajesEvaluacion={puntajesEvaluacion} handlePuntajeChange={handlePuntajeChange} calcularNotaIntegral={calcularNotaIntegral} idGanador={idGanador} N={N} wItem={4} wDesc={28} wPres={8} wProv={60/N} minContainerWidth={minContainerWidth} />
+            
+            {/* BOTONES INFERIORES (Ocultos al imprimir) */}
+            <div className="ce-footer no-print">
+              <div className="ce-action-buttons">
+                <button onClick={handleImprimir} className="ce-btn-action ce-btn-print">
+                  🖨️ Imprimir / Guardar PDF
+                </button>
+                <button onClick={handleExportarExcel} className="ce-btn-action ce-btn-excel">
+                  📊 Descargar Excel
+                </button>
+              </div>
+              <button 
+                onClick={guardarMatrizEvaluacion} 
+                disabled={guardandoMatriz} 
+                className="ce-btn-action ce-btn-save"
+              >
+                {guardandoMatriz ? 'Guardando...' : '💾 Confirmar Evaluación'}
+              </button>
+            </div>
+
+          </div>
+        )}
+
       </div>
-    </>
-  )
+    </div>
+  );
 }
+
 export default CentroEvaluacion;
