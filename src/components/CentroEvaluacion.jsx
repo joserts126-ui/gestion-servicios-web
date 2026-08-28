@@ -20,7 +20,11 @@ function CentroEvaluacion({ servicio, onClose, onActualizado }) {
   if (cargando) return <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(15, 23, 42, 0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 3000, color: 'white' }}>Cargando Centro de Evaluación...</div>;
   
   const itemsPendientes = itemsCotizaciones.filter(i => !i.idcategoria);
-  const cotizacionesParticipantes = servicio.cotizaciones || [];
+  
+  // NUEVO: Filtramos las cotizaciones antes de enviarlas a la matriz y calcular al ganador
+  const cotizacionesParticipantes = (servicio.cotizaciones || []).filter(
+    cot => cot.estado !== 'Rechazada' && cot.estado !== 'De Baja'
+  );
   
   let maxNota = -1; let idGanador = null;
   cotizacionesParticipantes.forEach(cot => { const nota = parseFloat(calcularNotaIntegral(cot.idcotizacion)); if (nota > maxNota && nota > 0) { maxNota = nota; idGanador = cot.idcotizacion; } });

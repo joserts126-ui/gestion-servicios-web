@@ -29,9 +29,14 @@ export const useEvaluacion = (servicio, onActualizado) => {
       let edicionInicial = {}; // <-- NUEVA VARIABLE PARA CARGAR EL JSON
 
       servicio.cotizaciones?.forEach(cot => {
+        // --- NUEVA LÍNEA: Filtro de estado ---
+        // Si la cotización está Rechazada o De baja, saltamos a la siguiente y no extraemos sus ítems
+        if (cot.estado === 'Rechazada' || cot.estado === 'De Baja') return;
+        // -------------------------------------
+
         pIniciales[cot.idcotizacion] = { eco: cot.puntaje_eco || 0, plazo: cot.puntaje_plazo || 0, alcance: cot.puntaje_alcance || 0, pago: cot.puntaje_pago || 0 };
         
-        // --- NUEVO: Cargar la edición guardada en la BD ---
+        // --- Cargar la edición guardada en la BD ---
         if (cot.edicion_matriz) {
           Object.keys(cot.edicion_matriz).forEach(idCat => {
             edicionInicial[`${idCat}-${cot.idcotizacion}`] = cot.edicion_matriz[idCat];
@@ -59,7 +64,7 @@ export const useEvaluacion = (servicio, onActualizado) => {
       });
       setItemsCotizaciones(todosLosItems); 
       setPuntajesEvaluacion(pIniciales); 
-      setEdicionMatriz(edicionInicial); // <-- NUEVO: Setear el estado con los datos de la BD
+      setEdicionMatriz(edicionInicial); 
       setCargando(false);
     };
     if (servicio) inicializar();
@@ -115,6 +120,11 @@ export const useEvaluacion = (servicio, onActualizado) => {
     try {
       // Iteramos sobre las cotizaciones del servicio para asegurar que recorremos todas
       for (const cot of servicio.cotizaciones) {
+        
+        // --- SEGURIDAD: También ignoramos las cotizaciones rechazadas al momento de guardar ---
+        if (cot.estado === 'Rechazada' || cot.estado === 'De baja') continue;
+        // -------------------------------------------------------------------------------------
+
         const idCot = cot.idcotizacion;
         const p = puntajesEvaluacion[idCot] || {};
         
