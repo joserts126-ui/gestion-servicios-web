@@ -9,12 +9,10 @@ import { PESOS_EVALUACION, getPorcentajeTexto } from '../config/reglasNegocio.js
 const CabeceraMatriz = ({ servicio, minContainerWidth }) => (
   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', minWidth: `${minContainerWidth}px` }} className="impresion-width-auto">
     <div style={{ width: '100%', textAlign: 'center', position: 'relative' }}>
-      {/* Conectado a variable de título */}
       <h1 style={{ margin: '0 0 15px 0', fontSize: CONFIG_PDF.fuente.titulo, fontWeight: 'bold', textDecoration: 'underline' }}>COMPARATIVO DE PROPUESTAS</h1>
       <div style={{ position: 'absolute', top: 0, right: 0, width: '180px', height: '45px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
         <img src={logoCentenario} alt="Logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
       </div>
-      {/* Conectado a variable de subtítulo */}
       <table style={{ width: '45%', fontSize: CONFIG_PDF.fuente.subtitulo, textAlign: 'left', marginBottom: '10px' }}>
         <tbody>
           <tr><td style={{ width: '70px', fontWeight: 'bold', padding: '3px' }}>Asunto</td><td style={{ padding: '3px' }}>{servicio.servicio.toUpperCase()}</td></tr>
@@ -34,9 +32,10 @@ const TablaResultados = ({ cotizacionesParticipantes, calcularNotaIntegral, idGa
     <table style={{ width: '60%', borderCollapse: 'collapse', marginBottom: '15px' }}>
       <thead>
         <tr style={rowBlack}>
-          <th style={{ ...thPdf, backgroundColor: '#000', color: '#FFF' }}>DESCRIPCIÓN</th>
-          <th style={{ ...thPdf, backgroundColor: '#000', color: '#FFF' }}>INCIDENCIA</th>
-          <th style={{ ...thPdf, backgroundColor: '#000', color: '#FFF' }}>ABREVIATURA</th>
+          {/* Filas negras con padding corto */}
+          <th style={{ ...thPdf, backgroundColor: '#000', color: '#FFF', padding: '2px 4px' }}>DESCRIPCIÓN</th>
+          <th style={{ ...thPdf, backgroundColor: '#000', color: '#FFF', padding: '2px 4px' }}>INCIDENCIA</th>
+          <th style={{ ...thPdf, backgroundColor: '#000', color: '#FFF', padding: '2px 4px' }}>ABREVIATURA</th>
         </tr>
       </thead>
       <tbody>
@@ -59,7 +58,7 @@ const TablaResultados = ({ cotizacionesParticipantes, calcularNotaIntegral, idGa
               <td key={`rfin-${cot.idcotizacion}`} style={{ ...tdCenter, fontWeight: 'bold', backgroundColor: '#5DADE2', color: '#000', border: borderPdf }}>{calcularNotaIntegral(cot.idcotizacion)}</td>
           ))}
         </tr>
-        <tr><td colSpan={cotizacionesParticipantes.length + 1} style={{ border: 'none', height: '8px' }}></td></tr>
+        <tr><td colSpan={cotizacionesParticipantes.length + 1} style={{ border: 'none', height: '6px' }}></td></tr>
         <tr>
           <td style={{ ...tdCenter, fontWeight: 'bold', backgroundColor: '#A6ACAF', color: '#000', border: borderPdf }}>POSTOR GANADOR</td>
           {cotizacionesParticipantes.map(cot => {
@@ -76,9 +75,16 @@ const TablaResultados = ({ cotizacionesParticipantes, calcularNotaIntegral, idGa
 // ==========================================
 // COMPONENTE PRINCIPAL (ORQUESTADOR)
 // ==========================================
-export default function MatrizComparativa({ servicio, cotizacionesParticipantes, categoriasHomologacion, itemsCotizaciones, edicionMatriz, handleEdicionMatriz, puntajesEvaluacion, handlePuntajeChange, calcularNotaIntegral, idGanador, N, wItem, wDesc, wPres, wProv, minContainerWidth }) {
+export default function MatrizComparativa({ servicio, cotizacionesParticipantes, categoriasHomologacion, itemsCotizaciones, edicionMatriz, handleEdicionMatriz, puntajesEvaluacion, handlePuntajeChange, calcularNotaIntegral, idGanador, N, minContainerWidth }) {
   
   const getMoneda = (cot) => cot.moneda?.moneda?.toUpperCase().includes('USD') ? '$' : 'S/';
+
+  const isCompact = N > 2; 
+  
+  const d_wItem = isCompact ? 3 : 5;       
+  const d_wDesc = isCompact ? 17 : 25;     
+  const d_wPres = isCompact ? 5 : 10;      
+  const d_wProv = isCompact ? (75 / N) : (60 / N); 
 
   const totales = useMemo(() => {
     const diccionario = {};
@@ -94,14 +100,7 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
       const igv = subtotal * 0.18;
       const total = subtotal + igv;
 
-      diccionario[cot.idcotizacion] = {
-        costoDirecto,
-        gastosGenerales,
-        utilidades,
-        subtotal,
-        igv,
-        total
-      };
+      diccionario[cot.idcotizacion] = { costoDirecto, gastosGenerales, utilidades, subtotal, igv, total };
     });
     
     return diccionario;
@@ -110,19 +109,31 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
   return (
     <div id="area-impresion" style={{ backgroundColor: 'white', width: '100%', maxWidth: '1800px', flex: 1, overflow: 'auto', padding: '30px 40px', fontFamily: 'Arial, sans-serif' }}>
       
+      <style>
+        {`
+          @media print {
+            @page {
+              size: ${isCompact ? 'landscape' : 'portrait'};
+              margin: ${isCompact ? '5mm' : '10mm'};
+            }
+          }
+        `}
+      </style>
+
       <CabeceraMatriz servicio={servicio} minContainerWidth={minContainerWidth} />
 
       <table id="tabla-maestra" style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: `${minContainerWidth}px` }} className="impresion-width-auto">
         <colgroup>
-          <col style={{ width: `${wItem}%` }} />
-          <col style={{ width: `${wDesc}%` }} />
-          <col style={{ width: `${wPres}%` }} />
+          <col style={{ width: `${d_wItem}%` }} />
+          <col style={{ width: `${d_wDesc}%` }} />
+          <col style={{ width: `${d_wPres}%` }} />
           {cotizacionesParticipantes.map(c => (
             <React.Fragment key={`cg-${c.idcotizacion}`}>
-              <col style={{ width: `${wProv * 0.15}%` }} />
-              <col style={{ width: `${wProv * 0.20}%` }} />
-              <col style={{ width: `${wProv * 0.30}%` }} />
-              <col style={{ width: `${wProv * 0.35}%` }} />
+              {/* Las 4 sub-columnas que suman el ancho de un proveedor */}
+              <col style={{ width: `${d_wProv * 0.12}%` }} /> 
+              <col style={{ width: `${d_wProv * 0.13}%` }} /> 
+              <col style={{ width: `${d_wProv * 0.30}%` }} />
+              <col style={{ width: `${d_wProv * 0.45}%` }} /> 
             </React.Fragment>
           ))}
         </colgroup>
@@ -152,7 +163,8 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
             ))}
           </tr>
 
-          <tr><td colSpan={3 + N*4} style={{ border: 'none', height: '25px' }}></td></tr>
+          {/* Separador más corto */}
+          <tr><td colSpan={3 + N*4} style={{ border: 'none', height: '8px' }}></td></tr>
 
           {/* --- 1. EVALUACIÓN ECONÓMICA --- */}
           <tr>
@@ -162,18 +174,18 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
           <tr>
             <th style={thPdf}>ITEM</th>
             <th style={thPdf}>DESCRIPCIÓN</th>
-            <th style={{ ...thPdf, backgroundColor: '#0070C0', color: 'white' }}>Presupuesto<br/>Objetivo y</th>
+            <th style={{ ...thPdf, backgroundColor: '#0070C0', color: 'white' }}>{isCompact ? 'Pto. Obj.' : 'Presupuesto Objetivo'}</th>
             {cotizacionesParticipantes.map(cot => (
               <React.Fragment key={`eco-head2-${cot.idcotizacion}`}>
-                <th style={{ ...thPdf, fontSize: '9.5px', padding: '8px 1px' }}>UNIDAD</th><th style={{ ...thPdf, fontSize: '9.5px', padding: '8px 1px' }}>CANTIDAD</th><th style={{ ...thPdf, fontSize: '9.5px', padding: '8px 1px' }}>P.U.</th><th style={{ ...thPdf, fontSize: '9.5px', padding: '8px 1px' }}>PARCIAL</th>
+                <th style={{ ...thPdf, fontSize: '8px', padding: '8px 1px' }}>UND</th><th style={{ ...thPdf, fontSize: '8px', padding: '8px 1px' }}>CANT</th><th style={{ ...thPdf, fontSize: '8px', padding: '8px 1px' }}>P.U.</th><th style={{ ...thPdf, fontSize: '8px', padding: '8px 1px' }}>PARCIAL</th>
               </React.Fragment>
             ))}
           </tr>
           
           {categoriasHomologacion.map((cat, idx) => (
-            <tr key={`cat-${cat.idcategoria}`}>
+            <tr key={`cat-${cat.idcategoria}`} style={{ pageBreakInside: 'avoid' }}>
               <td style={{ ...tdCenter, fontWeight: 'bold' }}>{idx + 1}</td>
-              <td style={tdPdf}>{cat.nombrecategoria.toUpperCase()}</td>
+              <td style={{ ...tdPdf, wordBreak: 'break-word', whiteSpace: 'normal' }}>{cat.nombrecategoria.toUpperCase()}</td>
               <td style={tdPdf}></td>
               {cotizacionesParticipantes.map(cot => {
                 const itemsCruzados = itemsCotizaciones.filter(i => i.idcategoria === cat.idcategoria && i.idcotizacion === cot.idcotizacion)
@@ -206,9 +218,9 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
                             color: estadoItem === 'NO CONTEMPLA' ? '#DC2626' : (estadoItem === 'SI CONTEMPLA' ? '#16A34A' : '#64748B')
                           }}
                         >
-                          <option value="">- SELECCIONAR -</option>
-                          <option value="SI CONTEMPLA">SI CONTEMPLA</option>
-                          <option value="NO CONTEMPLA">NO CONTEMPLA</option>
+                          <option value="">{isCompact ? '- SEL -' : '- SELECCIONAR -'}</option>
+                          <option value="SI CONTEMPLA">{isCompact ? 'SÍ' : 'SI CONTEMPLA'}</option>
+                          <option value="NO CONTEMPLA">{isCompact ? 'NO' : 'NO CONTEMPLA'}</option>
                         </select>
                       </td>
                     )}
@@ -218,15 +230,16 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
             </tr>
           ))}
           
-          <tr style={rowBlack}>
-            <td style={tdCenter}>A</td><td style={tdPdf}>COSTO DIRECTO</td><td style={tdPdf}></td>
+          {/* Filas negras con padding reducido (2px 4px) */}
+          <tr style={{ ...rowBlack, pageBreakInside: 'avoid' }}>
+            <td style={{...tdCenter, padding: '2px 4px'}}>A</td><td style={{...tdPdf, padding: '2px 4px'}}>COSTO DIRECTO</td><td style={{...tdPdf, padding: '2px 4px'}}></td>
             {cotizacionesParticipantes.map(cot => (
               <React.Fragment key={`cd-${cot.idcotizacion}`}>
-                <td colSpan="3" style={tdPdf}></td><td colSpan="1" style={tdRight}>{getMoneda(cot)} {totales[cot.idcotizacion].costoDirecto.toFixed(2)}</td>
+                <td colSpan="3" style={{...tdPdf, padding: '2px 4px'}}></td><td colSpan="1" style={{...tdRight, padding: '2px 4px'}}>{getMoneda(cot)} {totales[cot.idcotizacion].costoDirecto.toFixed(2)}</td>
               </React.Fragment>
             ))}
           </tr>
-          <tr>
+          <tr style={{ pageBreakInside: 'avoid' }}>
             <td style={tdCenter}>A.1</td><td style={tdPdf}>GASTOS GENERALES</td><td style={tdPdf}></td>
             {cotizacionesParticipantes.map(cot => (
                <React.Fragment key={`gg-${cot.idcotizacion}`}>
@@ -234,7 +247,7 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
                </React.Fragment> 
             ))}
           </tr>
-          <tr>
+          <tr style={{ pageBreakInside: 'avoid' }}>
             <td style={tdCenter}>A.2</td><td style={tdPdf}>UTILIDADES</td><td style={tdPdf}></td>
             {cotizacionesParticipantes.map(cot => (
                <React.Fragment key={`ut-${cot.idcotizacion}`}>
@@ -242,15 +255,15 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
                </React.Fragment> 
             ))}
           </tr>
-          <tr style={rowBlack}>
-            <td style={tdCenter}>B</td><td style={tdPdf}>SUB TOTAL</td><td style={tdPdf}></td>
+          <tr style={{ ...rowBlack, pageBreakInside: 'avoid' }}>
+            <td style={{...tdCenter, padding: '2px 4px'}}>B</td><td style={{...tdPdf, padding: '2px 4px'}}>SUB TOTAL</td><td style={{...tdPdf, padding: '2px 4px'}}></td>
             {cotizacionesParticipantes.map(cot => (
               <React.Fragment key={`sb-${cot.idcotizacion}`}>
-                <td colSpan="3" style={tdPdf}></td><td colSpan="1" style={tdRight}>{getMoneda(cot)} {totales[cot.idcotizacion].subtotal.toFixed(2)}</td>
+                <td colSpan="3" style={{...tdPdf, padding: '2px 4px'}}></td><td colSpan="1" style={{...tdRight, padding: '2px 4px'}}>{getMoneda(cot)} {totales[cot.idcotizacion].subtotal.toFixed(2)}</td>
               </React.Fragment>
             ))}
           </tr>
-          <tr>
+          <tr style={{ pageBreakInside: 'avoid' }}>
             <td style={tdCenter}>B.1</td><td style={tdPdf}>IGV (18%)</td><td style={tdPdf}></td>
             {cotizacionesParticipantes.map(cot => (
               <React.Fragment key={`igv-${cot.idcotizacion}`}>
@@ -258,16 +271,16 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
               </React.Fragment>
             ))}
           </tr>
-          <tr style={rowBlack}>
-            <td style={tdCenter}>C</td><td style={tdPdf}>TOTAL</td><td style={tdPdf}></td>
+          <tr style={{ ...rowBlack, pageBreakInside: 'avoid' }}>
+            <td style={{...tdCenter, padding: '2px 4px'}}>C</td><td style={{...tdPdf, padding: '2px 4px'}}>TOTAL</td><td style={{...tdPdf, padding: '2px 4px'}}></td>
             {cotizacionesParticipantes.map(cot => (
               <React.Fragment key={`tot-${cot.idcotizacion}`}>
-                <td colSpan="3" style={tdPdf}></td><td colSpan="1" style={tdRight}>{getMoneda(cot)} {totales[cot.idcotizacion].total.toFixed(2)}</td>
+                <td colSpan="3" style={{...tdPdf, padding: '2px 4px'}}></td><td colSpan="1" style={{...tdRight, padding: '2px 4px'}}>{getMoneda(cot)} {totales[cot.idcotizacion].total.toFixed(2)}</td>
               </React.Fragment>
             ))}
           </tr>
-          <tr style={rowYellow}>
-            <td colSpan="2" style={tdPdf}>PUNTAJE - EVALUACIÓN ECONÓMICA</td><td style={tdCenter}>5.00</td>
+          <tr style={{ ...rowYellow, pageBreakInside: 'avoid' }}>
+            <td colSpan="2" style={tdPdf}>{isCompact ? 'PUNTAJE - EV. ECONÓMICA' : 'PUNTAJE - EVALUACIÓN ECONÓMICA'}</td><td style={tdCenter}>5.00</td>
             {cotizacionesParticipantes.map(cot => (
               <td colSpan="4" key={`peco-${cot.idcotizacion}`} style={{ ...tdCenter, padding: '2px' }}>
                 <input type="number" min="0" max="5" step="0.1" value={puntajesEvaluacion[cot.idcotizacion]?.eco} onChange={(e) => handlePuntajeChange(cot.idcotizacion, 'eco', e.target.value)} style={inputStyleMatriz} />
@@ -275,23 +288,33 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
             ))}
           </tr>
 
-          <tr><td colSpan={3 + N*4} style={{ border: 'none', height: '25px' }}></td></tr>
+          <tr><td colSpan={3 + N*4} style={{ border: 'none', height: '8px' }}></td></tr>
 
-          {/* --- 2. PLAZOS --- */}
+          {/* --- 2. PLAZOS (REPARTIDO 2 Y 2) --- */}
           <tr>
             <th colSpan="3" style={{ ...thPdf, textAlign: 'center', backgroundColor: '#FFF', borderBottom: 'none' }}>Evaluación de Plazo</th>
             {cotizacionesParticipantes.map(cot => ( <th colSpan="4" key={`plz-head1-${cot.idcotizacion}`} style={thPdf}>{cot.proveedor?.razonsocial}</th> ))}
           </tr>
           <tr>
-            <th style={thPdf}>ITEM</th><th style={thPdf}>DESCRIPCIÓN</th><th style={{ ...thPdf, backgroundColor: '#0070C0', color: 'white' }}>Plazo Objetivo<br/>y Puntaje</th>
-            {cotizacionesParticipantes.map(cot => ( <React.Fragment key={`plz-head2-${cot.idcotizacion}`}><th colSpan="1" style={thPdf}>PLAZO</th><th colSpan="3" style={thPdf}>ENTREGABLE</th></React.Fragment> ))}
+            <th style={thPdf}>ITEM</th><th style={thPdf}>DESCRIPCIÓN</th><th style={{ ...thPdf, backgroundColor: '#0070C0', color: 'white' }}>{isCompact ? 'Plazo Obj.' : 'Plazo Objetivo y Puntaje'}</th>
+            {cotizacionesParticipantes.map(cot => ( 
+              <React.Fragment key={`plz-head2-${cot.idcotizacion}`}>
+                <th colSpan="2" style={thPdf}>PLAZO</th>
+                <th colSpan="2" style={thPdf}>ENTREGABLE</th>
+              </React.Fragment> 
+            ))}
           </tr>
-          <tr>
+          <tr style={{ pageBreakInside: 'avoid' }}>
             <td style={tdCenter}>2.00</td><td style={{ ...tdPdf, fontWeight: 'bold' }}>PLAZOS DE ENTREGA</td><td style={tdPdf}></td>
-            {cotizacionesParticipantes.map(cot => ( <React.Fragment key={`plz-data-${cot.idcotizacion}`}><td colSpan="1" style={tdCenter}>{cot.plazo_dias?.toUpperCase() || '---'}</td><td colSpan="3" style={tdPdf}>{cot.entregables || '---'}</td></React.Fragment> ))}
+            {cotizacionesParticipantes.map(cot => ( 
+              <React.Fragment key={`plz-data-${cot.idcotizacion}`}>
+                <td colSpan="2" style={tdCenter}>{cot.plazo_dias?.toUpperCase() || '---'}</td>
+                <td colSpan="2" style={{ ...tdPdf, wordBreak: 'break-word', whiteSpace: 'normal' }}>{cot.entregables || '---'}</td>
+              </React.Fragment> 
+            ))}
           </tr>
-          <tr style={rowYellow}>
-            <td colSpan="2" style={tdPdf}>PUNTAJE - EVALUACIÓN DE PLAZO</td><td style={tdCenter}>5.00</td>
+          <tr style={{ ...rowYellow, pageBreakInside: 'avoid' }}>
+            <td colSpan="2" style={tdPdf}>{isCompact ? 'PUNTAJE - EV. PLAZO' : 'PUNTAJE - EVALUACIÓN DE PLAZO'}</td><td style={tdCenter}>5.00</td>
             {cotizacionesParticipantes.map(cot => (
               <td colSpan="4" key={`pplz-${cot.idcotizacion}`} style={{ ...tdCenter, padding: '2px' }}>
                 <input type="number" min="0" max="5" step="0.1" value={puntajesEvaluacion[cot.idcotizacion]?.plazo} onChange={(e) => handlePuntajeChange(cot.idcotizacion, 'plazo', e.target.value)} style={inputStyleMatriz} />
@@ -299,36 +322,47 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
             ))}
           </tr>
 
-          <tr><td colSpan={3 + N*4} style={{ border: 'none', height: '25px' }}></td></tr>
+          <tr><td colSpan={3 + N*4} style={{ border: 'none', height: '8px' }}></td></tr>
 
-          {/* --- 3. ALCANCE --- */}
+          {/* --- 3. ALCANCE (REPARTIDO 2 Y 2) --- */}
           <tr>
             <th colSpan="3" style={{ ...thPdf, textAlign: 'center', backgroundColor: '#FFF', borderBottom: 'none' }}>Evaluación del Alcance Considerado</th>
             {cotizacionesParticipantes.map(cot => ( <th colSpan="4" key={`alc-head1-${cot.idcotizacion}`} style={thPdf}>{cot.proveedor?.razonsocial}</th> ))}
           </tr>
           <tr>
-            <th style={thPdf}>ITEM</th><th style={thPdf}>DESCRIPCIÓN</th><th style={{ ...thPdf, backgroundColor: '#00B050', color: 'white' }}>Puntaje<br/>Máximo</th>
-            {cotizacionesParticipantes.map(cot => ( <React.Fragment key={`alc-head2-${cot.idcotizacion}`}><th colSpan="1" style={thPdf}>ITEM</th><th colSpan="3" style={thPdf}>DESCRIPCIÓN</th></React.Fragment> ))}
+            <th style={thPdf}>ITEM</th><th style={thPdf}>DESCRIPCIÓN</th><th style={{ ...thPdf, backgroundColor: '#00B050', color: 'white' }}>{isCompact ? 'Ptje Máx' : 'Puntaje Máximo'}</th>
+            {cotizacionesParticipantes.map(cot => ( 
+              <React.Fragment key={`alc-head2-${cot.idcotizacion}`}>
+                <th colSpan="2" style={thPdf}>ITEM</th>
+                <th colSpan="2" style={thPdf}>DESCRIPCIÓN</th>
+              </React.Fragment> 
+            ))}
           </tr>
-          <tr>
+          <tr style={{ pageBreakInside: 'avoid' }}>
             <td style={tdCenter}>3</td><td style={{ ...tdPdf, fontWeight: 'bold' }}>ALCANCES CONSIDERADOS</td><td style={{ ...tdPdf, borderBottom: 'none' }}></td>
-            {cotizacionesParticipantes.map(cot => ( <React.Fragment key={`alc-0-${cot.idcotizacion}`}><td colSpan="1" style={{...tdPdf, borderBottom: 'none'}}></td><td colSpan="3" style={{...tdPdf, borderBottom: 'none'}}></td></React.Fragment> ))}
+            {cotizacionesParticipantes.map(cot => ( 
+              <React.Fragment key={`alc-0-${cot.idcotizacion}`}>
+                <td colSpan="2" style={{...tdPdf, borderBottom: 'none'}}></td>
+                <td colSpan="2" style={{...tdPdf, borderBottom: 'none'}}></td>
+              </React.Fragment> 
+            ))}
           </tr>
           {categoriasHomologacion.map((cat, idx) => {
             const letra = String.fromCharCode(97 + idx); 
             return (
-              <tr key={`alc-cat-${cat.idcategoria}`}>
-                <td style={tdCenter}>{letra}.</td><td style={tdPdf}>{cat.nombrecategoria}</td><td style={{ ...tdPdf, borderTop: 'none', borderBottom: 'none' }}></td>
+              <tr key={`alc-cat-${cat.idcategoria}`} style={{ pageBreakInside: 'avoid' }}>
+                <td style={tdCenter}>{letra}.</td><td style={{ ...tdPdf, wordBreak: 'break-word', whiteSpace: 'normal' }}>{cat.nombrecategoria}</td><td style={{ ...tdPdf, borderTop: 'none', borderBottom: 'none' }}></td>
                 {cotizacionesParticipantes.map(cot => (
                    <React.Fragment key={`alc-cat-${cat.idcategoria}-${cot.idcotizacion}`}>
-                     <td colSpan="1" style={tdCenter}>{letra}.</td><td colSpan="3" style={tdPdf}>{cat.nombrecategoria}</td>
+                     <td colSpan="2" style={tdCenter}>{letra}.</td>
+                     <td colSpan="2" style={{ ...tdPdf, wordBreak: 'break-word', whiteSpace: 'normal' }}>{cat.nombrecategoria}</td>
                    </React.Fragment> 
                 ))}
               </tr>
             )
           })}
-          <tr style={rowYellow}>
-            <td colSpan="2" style={tdPdf}>PUNTAJE - CUMPLIMIENTO DE ALCANCES</td><td style={tdCenter}>5.00</td>
+          <tr style={{ ...rowYellow, pageBreakInside: 'avoid' }}>
+            <td colSpan="2" style={tdPdf}>{isCompact ? 'PUNTAJE - CUMP. ALCANCES' : 'PUNTAJE - CUMPLIMIENTO DE ALCANCES'}</td><td style={tdCenter}>5.00</td>
             {cotizacionesParticipantes.map(cot => (
               <td colSpan="4" key={`palc-${cot.idcotizacion}`} style={{ ...tdCenter, padding: '2px' }}>
                 <input type="number" min="0" max="5" step="0.1" value={puntajesEvaluacion[cot.idcotizacion]?.alcance} onChange={(e) => handlePuntajeChange(cot.idcotizacion, 'alcance', e.target.value)} style={inputStyleMatriz} />
@@ -336,32 +370,42 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
             ))}
           </tr>
 
-          <tr><td colSpan={3 + N*4} style={{ border: 'none', height: '25px' }}></td></tr>
+          <tr><td colSpan={3 + N*4} style={{ border: 'none', height: '8px' }}></td></tr>
 
-          {/* --- 4. FORMA DE PAGO --- */}
+          {/* --- 4. FORMA DE PAGO (REPARTIDO 2 Y 2) --- */}
           <tr>
             <th colSpan="3" style={{ ...thPdf, textAlign: 'center', backgroundColor: '#FFF', borderBottom: 'none' }}>Evaluación de forma de Pago</th>
             {cotizacionesParticipantes.map(cot => ( <th colSpan="4" key={`pag-head1-${cot.idcotizacion}`} style={thPdf}>{cot.proveedor?.razonsocial}</th> ))}
           </tr>
           <tr>
-            <th style={thPdf}>ITEM</th><th style={thPdf}>DESCRIPCIÓN</th><th style={{ ...thPdf, backgroundColor: '#0070C0', color: 'white' }}>Porcentajes<br/>Objetivo...</th>
-            {cotizacionesParticipantes.map(cot => ( <React.Fragment key={`pag-head2-${cot.idcotizacion}`}><th colSpan="1" style={thPdf}>%</th><th colSpan="3" style={thPdf}>Descripción</th></React.Fragment> ))}
-          </tr>
-          <tr>
-            <td style={tdCenter}>4.00</td><td style={{ ...tdPdf, fontWeight: 'bold' }}>FORMA DE PAGO</td><td style={tdPdf}></td>
-            {cotizacionesParticipantes.map(cot => ( <React.Fragment key={`pag-0-${cot.idcotizacion}`}><td colSpan="1" style={tdPdf}></td><td colSpan="3" style={tdPdf}></td></React.Fragment> ))}
-          </tr>
-          <tr>
-            <td style={tdCenter}>a.</td><td style={tdPdf}>Condición del Postor</td><td style={tdPdf}></td>
+            <th style={thPdf}>ITEM</th><th style={thPdf}>DESCRIPCIÓN</th><th style={{ ...thPdf, backgroundColor: '#0070C0', color: 'white' }}>{isCompact ? '% Obj.' : 'Porcentajes Objetivo'}</th>
             {cotizacionesParticipantes.map(cot => ( 
-              <React.Fragment key={`pag-1-${cot.idcotizacion}`}>
-                <td colSpan="1" style={tdPdf}></td>
-                <td colSpan="3" style={tdCenter}>{cot.formapago?.formapago || (cot.idformapago ? 'Ver ficha' : '---')}</td>
+              <React.Fragment key={`pag-head2-${cot.idcotizacion}`}>
+                <th colSpan="2" style={thPdf}>%</th>
+                <th colSpan="2" style={thPdf}>DESCRIPCIÓN</th>
               </React.Fragment> 
             ))}
           </tr>
-          <tr style={rowYellow}>
-            <td colSpan="2" style={tdPdf}>PUNTAJE - EVALUACIÓN DE FORMA DE PAGO</td><td style={tdCenter}>5.00</td>
+          <tr style={{ pageBreakInside: 'avoid' }}>
+            <td style={tdCenter}>4.00</td><td style={{ ...tdPdf, fontWeight: 'bold' }}>FORMA DE PAGO</td><td style={tdPdf}></td>
+            {cotizacionesParticipantes.map(cot => ( 
+              <React.Fragment key={`pag-0-${cot.idcotizacion}`}>
+                <td colSpan="2" style={tdPdf}></td>
+                <td colSpan="2" style={tdPdf}></td>
+              </React.Fragment> 
+            ))}
+          </tr>
+          <tr style={{ pageBreakInside: 'avoid' }}>
+            <td style={tdCenter}>a.</td><td style={tdPdf}>Condición del Postor</td><td style={tdPdf}></td>
+            {cotizacionesParticipantes.map(cot => ( 
+              <React.Fragment key={`pag-1-${cot.idcotizacion}`}>
+                <td colSpan="2" style={tdPdf}></td>
+                <td colSpan="2" style={tdCenter}>{cot.formapago?.formapago || (cot.idformapago ? 'Ver ficha' : '---')}</td>
+              </React.Fragment> 
+            ))}
+          </tr>
+          <tr style={{ ...rowYellow, pageBreakInside: 'avoid' }}>
+            <td colSpan="2" style={tdPdf}>{isCompact ? 'PUNTAJE - EV. PAGO' : 'PUNTAJE - EVALUACIÓN DE FORMA DE PAGO'}</td><td style={tdCenter}>5.00</td>
             {cotizacionesParticipantes.map(cot => (
               <td colSpan="4" key={`ppag-${cot.idcotizacion}`} style={{ ...tdCenter, padding: '2px' }}>
                 <input type="number" min="0" max="5" step="0.1" value={puntajesEvaluacion[cot.idcotizacion]?.pago} onChange={(e) => handlePuntajeChange(cot.idcotizacion, 'pago', e.target.value)} style={inputStyleMatriz} />
@@ -369,13 +413,13 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
             ))}
           </tr>
 
-          <tr><td colSpan={3 + N*4} style={{ border: 'none', height: '35px' }}></td></tr>
+          <tr><td colSpan={3 + N*4} style={{ border: 'none', height: '8px' }}></td></tr>
 
           {/* 3. LLAMAMOS AL SUB-COMPONENTE TABLA FINAL */}
-          <tr>
+          <tr style={{ pageBreakInside: 'avoid' }}>
             <td colSpan={2}></td><td colSpan="1" style={{ border: 'none' }}></td>
             <td colSpan={N * 4}>
-              <TablaResultados cotizacionesParticipantes={cotizacionesParticipantes} calcularNotaIntegral={calcularNotaIntegral} idGanador={idGanador} N={N} />
+              <TablaResultados cotizacionesParticipantes={cotizacionesParticipantes} calcularNotaIntegral={calcularNotaIntegral} idGanador={idGanador} />
             </td>
           </tr>
 
