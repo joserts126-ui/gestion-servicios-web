@@ -187,5 +187,15 @@
   
   .no-print { display: none !important; }
   tr { page-break-inside: avoid; }
-  @page { size: auto; margin: 10mm; }
+  /* Forzamos los márgenes físicos de la hoja al mínimo posible */
+  @page { 
+    size: landscape; 
+    margin: 5mm; 
+  }
+  
+  /* Forzamos a la tabla a no desbordarse */
+  #tabla-maestra {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
 }

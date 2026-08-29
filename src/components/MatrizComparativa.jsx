@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import logoCentenario from '../assets/logoCentenario.png';
-import { thPdf, tdPdf, tdCenter, tdRight, rowBlack, rowYellow, borderPdf, inputStyleMatriz } from '../styles/matrizStyles.js'; 
+import { thPdf, tdPdf, tdCenter, tdRight, rowBlack, rowYellow, borderPdf, inputStyleMatriz, CONFIG_PDF } from '../styles/matrizStyles.js'; 
 import { PESOS_EVALUACION, getPorcentajeTexto } from '../config/reglasNegocio.js';
 
 // ==========================================
@@ -9,11 +9,13 @@ import { PESOS_EVALUACION, getPorcentajeTexto } from '../config/reglasNegocio.js
 const CabeceraMatriz = ({ servicio, minContainerWidth }) => (
   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', minWidth: `${minContainerWidth}px` }} className="impresion-width-auto">
     <div style={{ width: '100%', textAlign: 'center', position: 'relative' }}>
-      <h1 style={{ margin: '0 0 15px 0', fontSize: '16px', fontWeight: 'bold', textDecoration: 'underline' }}>COMPARATIVO DE PROPUESTAS</h1>
+      {/* Conectado a variable de título */}
+      <h1 style={{ margin: '0 0 15px 0', fontSize: CONFIG_PDF.fuente.titulo, fontWeight: 'bold', textDecoration: 'underline' }}>COMPARATIVO DE PROPUESTAS</h1>
       <div style={{ position: 'absolute', top: 0, right: 0, width: '180px', height: '45px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
         <img src={logoCentenario} alt="Logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
       </div>
-      <table style={{ width: '45%', fontSize: '10.5px', textAlign: 'left', marginBottom: '10px' }}>
+      {/* Conectado a variable de subtítulo */}
+      <table style={{ width: '45%', fontSize: CONFIG_PDF.fuente.subtitulo, textAlign: 'left', marginBottom: '10px' }}>
         <tbody>
           <tr><td style={{ width: '70px', fontWeight: 'bold', padding: '3px' }}>Asunto</td><td style={{ padding: '3px' }}>{servicio.servicio.toUpperCase()}</td></tr>
           <tr><td style={{ fontWeight: 'bold', padding: '3px' }}>Proyecto</td><td style={{ padding: '3px' }}>{servicio.lugarejecucion?.lugarejecucion?.toUpperCase() || '---'}</td></tr>
@@ -78,26 +80,20 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
   
   const getMoneda = (cot) => cot.moneda?.moneda?.toUpperCase().includes('USD') ? '$' : 'S/';
 
-  // --- OPTIMIZACIÓN DE RENDIMIENTO CON useMemo ---
-  // Calculamos todos los totales financieros una sola vez al cargar la tabla 
-  // y solo se recalcularán si cambian los ítems o los participantes.
   const totales = useMemo(() => {
     const diccionario = {};
     
     cotizacionesParticipantes.forEach(cot => {
-      // 1. Costo Directo
       const costoDirecto = itemsCotizaciones
         .filter(i => i.idcotizacion === cot.idcotizacion && i.idcategoria)
         .reduce((acc, curr) => acc + curr.totalFila, 0);
       
-      // 2. Adicionales
       const gastosGenerales = parseFloat(cot.gastos_generales || 0);
       const utilidades = parseFloat(cot.utilidades || 0);
       const subtotal = costoDirecto + gastosGenerales + utilidades;
       const igv = subtotal * 0.18;
       const total = subtotal + igv;
 
-      // 3. Guardamos en el diccionario
       diccionario[cot.idcotizacion] = {
         costoDirecto,
         gastosGenerales,
