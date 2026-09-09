@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard'
 import Servicios from './pages/Servicios'
 import Cotizaciones from './pages/Cotizaciones' // 1. Importamos la nueva pantalla
 import Proveedores from './pages/Proveedores'
+import InventarioPTAR from './pages/InventarioPTAR'
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/servicios" element={<Servicios />} />
         <Route path="/proveedores" element={<Proveedores />} />
+        <Route path="/inventario" element={<InventarioPTAR />} />
         {/* 2. Añadimos la ruta dinámica con el parámetro :id */}
         <Route path="/cotizaciones/:id" element={<Cotizaciones />} />
       </Routes>

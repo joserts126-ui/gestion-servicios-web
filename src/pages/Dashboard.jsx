@@ -286,15 +286,16 @@ function Dashboard() {
             <div style={{ fontSize: '36px', filter: 'grayscale(100%)' }}>👥</div>
             <div>
               <div style={{ fontWeight: '800', fontSize: '18px', color: theme.textMain }}>Usuarios</div>
-              <div style={{ color: theme.textMuted, fontSize: '13px' }}>Módulo bloqueado</div>
+              <div style={{ color: theme.textMuted, fontSize: '13px' }}>Módulo en desarrollo</div>
             </div>
           </button>
 
-          <button style={{ ...cardStyle, opacity: 0.6, cursor: 'not-allowed', display: 'flex', alignItems: 'center', gap: '16px', border: 'none', textAlign: 'left' }}>
-            <div style={{ fontSize: '36px', filter: 'grayscale(100%)' }}>⚙️</div>
+          {/* NUEVO BOTÓN: Control de Inventario PTAR */}
+          <button onClick={() => navigate('/inventario')} style={{ ...cardStyle, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '16px', border: `1px solid ${theme.primary}`, textAlign: 'left', backgroundColor: '#F0F9FF' }}>
+            <div style={{ fontSize: '36px' }}>📦</div>
             <div>
-              <div style={{ fontWeight: '800', fontSize: '18px', color: theme.textMain }}>Configuración</div>
-              <div style={{ color: theme.textMuted, fontSize: '13px' }}>Módulo bloqueado</div>
+              <div style={{ fontWeight: '800', fontSize: '18px', color: theme.primary }}>Inventario PTAR</div>
+              <div style={{ color: theme.textMuted, fontSize: '13px' }}>Gestión de stock e insumos</div>
             </div>
           </button>
         </div>
