@@ -5,7 +5,8 @@ import { exportarExcelMatriz } from '../utils/exportadorExcel';
 import { useEvaluacion } from '../hooks/useEvaluacion'; // Asegúrate de que la ruta coincida
 import '../styles/centroEvaluacion.css'; // <-- NUEVO: Importamos los estilos limpios
 
-function CentroEvaluacion({ servicio, onClose, onActualizado }) {
+// NUEVO: Agregamos rolUsuario a los props
+function CentroEvaluacion({ servicio, rolUsuario, onClose, onActualizado }) {
   const {
     cargando, categoriasHomologacion, nuevaCategoria, setNuevaCategoria, itemsSeleccionados, itemsCotizaciones,
     edicionMatriz, puntajesEvaluacion, guardandoMatriz, handleCrearCategoria, handleEliminarCategoria,
@@ -13,7 +14,11 @@ function CentroEvaluacion({ servicio, onClose, onActualizado }) {
     calcularNotaIntegral, guardarMatrizEvaluacion
   } = useEvaluacion(servicio, onActualizado);
 
-  const [pestanaHomologacion, setPestañaHomologacion] = useState('agrupar');
+  // NUEVO: Calculamos si es visor
+  const esVisor = rolUsuario === 'VISOR';
+
+  // Si es visor, lo mandamos directo a la pestaña de evaluar (Matriz) para que no vea la pantalla de agrupación
+  const [pestanaHomologacion, setPestañaHomologacion] = useState(esVisor ? 'evaluar' : 'agrupar');
 
   const handleImprimir = () => window.print();
   const handleExportarExcel = () => exportarExcelMatriz(servicio.idservicio, servicio.cotizaciones?.length || 1);
@@ -52,18 +57,21 @@ function CentroEvaluacion({ servicio, onClose, onActualizado }) {
             <h2 className="ce-title">⚖️ Centro de Homologación y Evaluación</h2>
             <p className="ce-subtitle">Servicio #{servicio.idservicio} - {servicio.servicio}</p>
             <div className="ce-tabs-container">
-              <button 
-                className={`ce-btn-tab ${pestanaHomologacion === 'agrupar' ? 'active' : ''}`}
-                onClick={() => setPestañaHomologacion('agrupar')}
-              >
-                Paso 1: Agrupar Canastas
-              </button>
+              {/* Ocultamos la pestaña de Agrupar si es VISOR, porque ellos no deben armar la matriz */}
+              {!esVisor && (
+                <button 
+                  className={`ce-btn-tab ${pestanaHomologacion === 'agrupar' ? 'active' : ''}`}
+                  onClick={() => setPestañaHomologacion('agrupar')}
+                >
+                  Paso 1: Agrupar Canastas
+                </button>
+              )}
               <button 
                 className={`ce-btn-tab ${pestanaHomologacion === 'evaluar' ? 'active' : ''}`}
                 onClick={() => setPestañaHomologacion('evaluar')} 
-                disabled={itemsPendientes.length > 0} 
+                disabled={itemsPendientes.length > 0 && !esVisor} 
               >
-                Paso 2: Matriz Comparativa
+                {esVisor ? 'Matriz Comparativa de Propuestas' : 'Paso 2: Matriz Comparativa'}
               </button>
             </div>
           </div>
@@ -71,7 +79,7 @@ function CentroEvaluacion({ servicio, onClose, onActualizado }) {
         </div>
 
         {/* PESTAÑA 1: AGRUPACIÓN */}
-        {pestanaHomologacion === 'agrupar' && (
+        {pestanaHomologacion === 'agrupar' && !esVisor && (
           <PanelAgrupacion itemsPendientes={itemsPendientes} itemsSeleccionados={itemsSeleccionados} toggleSeleccionItem={toggleSeleccionItem} categoriasHomologacion={categoriasHomologacion} nuevaCategoria={nuevaCategoria} setNuevaCategoria={setNuevaCategoria} handleCrearCategoria={handleCrearCategoria} handleEliminarCategoria={handleEliminarCategoria} asignarItemsACategoria={asignarItemsACategoria} itemsCotizaciones={itemsCotizaciones} desasignarItem={desasignarItem} />
         )}
         
@@ -79,7 +87,23 @@ function CentroEvaluacion({ servicio, onClose, onActualizado }) {
         {pestanaHomologacion === 'evaluar' && (
           <div className="ce-matriz-wrapper">
             
-            <MatrizComparativa servicio={servicio} cotizacionesParticipantes={cotizacionesParticipantes} categoriasHomologacion={categoriasHomologacion} itemsCotizaciones={itemsCotizaciones} edicionMatriz={edicionMatriz} handleEdicionMatriz={handleEdicionMatriz} puntajesEvaluacion={puntajesEvaluacion} handlePuntajeChange={handlePuntajeChange} calcularNotaIntegral={calcularNotaIntegral} idGanador={idGanador} N={N} wItem={4} wDesc={28} wPres={8} wProv={60/N} minContainerWidth={minContainerWidth} />
+            {/* NUEVO: Pasamos el prop esVisor a la Matriz */}
+            <MatrizComparativa 
+              servicio={servicio} 
+              cotizacionesParticipantes={cotizacionesParticipantes} 
+              categoriasHomologacion={categoriasHomologacion} 
+              itemsCotizaciones={itemsCotizaciones} 
+              edicionMatriz={edicionMatriz} 
+              handleEdicionMatriz={handleEdicionMatriz} 
+              puntajesEvaluacion={puntajesEvaluacion} 
+              handlePuntajeChange={handlePuntajeChange} 
+              calcularNotaIntegral={calcularNotaIntegral} 
+              idGanador={idGanador} 
+              N={N} 
+              wItem={4} wDesc={28} wPres={8} wProv={60/N} 
+              minContainerWidth={minContainerWidth} 
+              esVisor={esVisor} 
+            />
             
             {/* BOTONES INFERIORES (Ocultos al imprimir) */}
             <div className="ce-footer no-print">
@@ -91,13 +115,16 @@ function CentroEvaluacion({ servicio, onClose, onActualizado }) {
                   📊 Descargar Excel
                 </button>
               </div>
-              <button 
-                onClick={guardarMatrizEvaluacion} 
-                disabled={guardandoMatriz} 
-                className="ce-btn-action ce-btn-save"
-              >
-                {guardandoMatriz ? 'Guardando...' : '💾 Confirmar Evaluación'}
-              </button>
+              {/* Ocultamos el botón de guardar evaluación si es Visor */}
+              {!esVisor && (
+                <button 
+                  onClick={guardarMatrizEvaluacion} 
+                  disabled={guardandoMatriz} 
+                  className="ce-btn-action ce-btn-save"
+                >
+                  {guardandoMatriz ? 'Guardando...' : '💾 Confirmar Evaluación'}
+                </button>
+              )}
             </div>
 
           </div>

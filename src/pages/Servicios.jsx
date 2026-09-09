@@ -15,9 +15,11 @@ function Servicios() {
   const [sistemas, setSistemas] = useState([])
   const [subsistemas, setSubsistemas] = useState([])
   const [catImpuestos, setCatImpuestos] = useState([])
-  const [catUnidades, setCatUnidades] = useState([]) // NUEVO: Para traer nombres de unidades
+  const [catUnidades, setCatUnidades] = useState([]) 
   const [cargando, setCargando] = useState(true)
+  
   const [idUsuarioActual, setIdUsuarioActual] = useState('')
+  const [rolUsuarioActual, setRolUsuarioActual] = useState('ADMIN') // NUEVO: ROL - Guardamos el rol del usuario
 
   const [busqueda, setBusqueda] = useState('')
   const [filtroEstado, setFiltroEstado] = useState([])
@@ -75,24 +77,20 @@ function Servicios() {
   const [mostrarModalHomologacion, setMostrarModalHomologacion] = useState(false)
   const [servicioHomologacion, setServicioHomologacion] = useState(null)
 
-  // ===== ESTADOS PARA EL EXPORTADOR CSV AVANZADO =====
   const [serviciosSeleccionados, setServiciosSeleccionados] = useState([])
   const [mostrarModalExportar, setMostrarModalExportar] = useState(false)
   
-  // NIVEL 1: Datos del Requerimiento (Servicio)
   const [columnasExportar, setColumnasExportar] = useState({
     id: true, prioridad: true, fechaSolicitud: true, servicio: true, lugar: true,
     proveedorAprobado: false, montoAprobado: false, responsable: true, docs: true, progreso: true, estado: true
   })
 
-  // NIVEL 2: Datos de la Cotización
   const [columnasCotExportar, setColumnasCotExportar] = useState({
     cot_id: false, cot_proveedor: true, cot_moneda: true, cot_estado: true, cot_monto: true, 
     cot_condicionPago: false, cot_plazo: false, cot_fechaEnvio: true, cot_fechaVisita: false, 
     cot_fechaRecepcion: true, cot_fechaAceptacion: false, cot_fechaInicio: false, cot_fechaFin: false
   })
 
-  // NIVEL 3: Datos de los Ítems (Detalle Cotización)
   const [columnasDetExportar, setColumnasDetExportar] = useState({
     det_item: true, det_unidad: true, det_afectacion: false, det_cantidad: true, det_precio: true, det_subtotal: true
   })
@@ -123,8 +121,16 @@ function Servicios() {
     setCatImpuestos(await fetchSafe(supabase.from('impuestos').select('*')))
     setCatUnidades(await fetchSafe(supabase.from('unidadmedida').select('*').eq('activo', true)))
     
-    const dataUsuarios = await fetchSafe(supabase.from('usuario').select('*').eq('activo', true))
-    if (dataUsuarios && dataUsuarios.length > 0) setIdUsuarioActual(dataUsuarios[0].idusuario)
+    // NUEVO: Leemos quién es el que acaba de iniciar sesión
+    const usuarioGuardado = localStorage.getItem('usuarioApp');
+    if (usuarioGuardado) {
+      const userObj = JSON.parse(usuarioGuardado);
+      setIdUsuarioActual(userObj.idusuario);
+      setRolUsuarioActual(userObj.rol || 'ADMIN');
+    } else {
+      // Si alguien intenta entrar sin loguearse, lo pateamos al Login
+      navigate('/');
+    }
     
     setCargando(false)
   }
@@ -235,7 +241,6 @@ function Servicios() {
   const indiceUltimoRegistro = paginaActual * registrosPorPagina
   const datosPaginados = datosProcesados.slice(indiceUltimoRegistro - registrosPorPagina, indiceUltimoRegistro)
 
-  // ===== LÓGICA DE EXPORTACIÓN (NIVEL 3: ÍTEMS) =====
   const toggleSeleccionServicio = (id, e) => {
     e.stopPropagation()
     setServiciosSeleccionados(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id])
@@ -253,7 +258,6 @@ function Servicios() {
     const dataAExportar = listaServicios.filter(s => serviciosSeleccionados.includes(s.idservicio));
     if (dataAExportar.length === 0) return;
 
-    // 1. ARMAMOS LAS CABECERAS
     const cabeceras = [];
     if (columnasExportar.id) cabeceras.push("ID Servicio");
     if (columnasExportar.prioridad) cabeceras.push("Prioridad");
@@ -296,11 +300,9 @@ function Servicios() {
 
     let csvString = cabeceras.join(";") + "\n";
 
-    // 2. ARMAMOS LAS FILAS (FLAT FILE 3 NIVELES)
     dataAExportar.forEach(row => {
       const limpiar = (texto) => {
         let str = String(texto || '');
-        // Si el texto empieza con +, -, = o @, le inyectamos un espacio al inicio
         if (/^[+\-=@]/.test(str)) {
           str = ' ' + str;
         }
@@ -344,7 +346,6 @@ function Servicios() {
           if (columnasCotExportar.cot_fechaInicio) filaCotBase.push(limpiar(cot.fechainicio));
           if (columnasCotExportar.cot_fechaFin) filaCotBase.push(limpiar(cot.fechafin));
 
-          // Nivel 3: Ítems
           if (incluyeDetalles && cot.detallecotizacion && cot.detallecotizacion.length > 0) {
             cot.detallecotizacion.forEach(det => {
               const filaDetFinal = [...filaCotBase];
@@ -502,7 +503,10 @@ function Servicios() {
               style={{ padding: '10px 20px', backgroundColor: serviciosSeleccionados.length > 0 ? theme.success : '#E2E8F0', color: 'white', border: 'none', borderRadius: '8px', cursor: serviciosSeleccionados.length > 0 ? 'pointer' : 'not-allowed', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
               📥 Exportar Data ({serviciosSeleccionados.length})
             </button>
-            <button onClick={abrirModalNuevo} style={{ padding: '10px 20px', backgroundColor: theme.primary, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>+ Nuevo Servicio</button>
+            {/* NUEVO: ROL - Ocultamos el botón "Nuevo Servicio" si el rol es VISOR */}
+            {rolUsuarioActual !== 'VISOR' && (
+              <button onClick={abrirModalNuevo} style={{ padding: '10px 20px', backgroundColor: theme.primary, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>+ Nuevo Servicio</button>
+            )}
           </div>
         </div>
 
@@ -624,7 +628,10 @@ function Servicios() {
                               <button onClick={(e) => toggleAcciones(srv.idservicio, e)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: theme.textMuted }}>⋮</button>
                               {menuAccionesFila === srv.idservicio && (
                                 <div onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', right: '30px', top: '50%', transform: 'translateY(-50%)', backgroundColor: 'white', border: `1px solid ${theme.border}`, borderRadius: '8px', zIndex: 50, display: 'flex', gap: '4px', padding: '6px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
-                                  <button onClick={() => {abrirModalEditar(srv); setMenuAccionesFila(null)}} style={{ padding: '6px 10px', border: `1px solid ${theme.border}`, borderRadius: '6px', background: 'white', cursor: 'pointer', fontSize: '12px' }}>✏️ Editar</button>
+                                  {/* NUEVO: ROL - Ocultamos el botón "Editar" si es VISOR */}
+                                  {rolUsuarioActual !== 'VISOR' && (
+                                    <button onClick={() => {abrirModalEditar(srv); setMenuAccionesFila(null)}} style={{ padding: '6px 10px', border: `1px solid ${theme.border}`, borderRadius: '6px', background: 'white', cursor: 'pointer', fontSize: '12px' }}>✏️ Editar</button>
+                                  )}
                                   <button onClick={() => {navigate(`/cotizaciones/${srv.idservicio}`); setMenuAccionesFila(null)}} style={{ padding: '6px 10px', border: `1px solid ${theme.border}`, borderRadius: '6px', background: '#F8FAFC', color: theme.primary, cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>📄 Cotizar</button>
                                   <button onClick={() => {abrirModalHomologacion(srv); setMenuAccionesFila(null)}} disabled={!tieneCotizaciones} style={{ padding: '6px 10px', cursor: tieneCotizaciones ? 'pointer' : 'not-allowed', backgroundColor: tieneCotizaciones ? '#EFF6FF' : '#F1F5F9', color: tieneCotizaciones ? theme.primary : '#94A3B8', border: tieneCotizaciones ? '1px solid #BFDBFE' : `1px solid ${theme.border}`, borderRadius: '6px', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>⚖️ Evaluar</button>
                                 </div>
@@ -704,7 +711,6 @@ function Servicios() {
           )}
         </div>
 
-        {/* ===== MODAL DEL REPORT BUILDER (EXPORTAR CSV NIVELES 1, 2 Y 3) ===== */}
         {mostrarModalExportar && (
           <div className="modal-exportar-container" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(15, 23, 42, 0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000, backdropFilter: 'blur(4px)' }}>
             <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '12px', width: '700px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', maxHeight: '90vh', overflowY: 'auto' }}>
@@ -753,11 +759,13 @@ function Servicios() {
           </div>
         )}
 
+        {/* NUEVO: ROL - Le pasamos el rolUsuarioActual al Modal */}
         <ServicioModal 
           visible={mostrarModalPrincipal} 
           modoEdicion={modoEdicion} 
           servicioAEditar={servicioSeleccionado}
           idUsuarioActual={idUsuarioActual}
+          rolUsuario={rolUsuarioActual} 
           lugares={lugares}
           tiposInfraestructura={tiposInfraestructura}
           tiposServicio={tiposServicio}
@@ -767,8 +775,14 @@ function Servicios() {
           onSuccess={() => { setMostrarModalPrincipal(false); cargarDatosIniciales(); }}
         />
 
+        {/* NUEVO: ROL - Le pasamos el rolUsuarioActual al Evaluador */}
         {mostrarModalHomologacion && servicioHomologacion && (
-          <CentroEvaluacion servicio={servicioHomologacion} onClose={() => setMostrarModalHomologacion(false)} onActualizado={() => { setMostrarModalHomologacion(false); cargarDatosIniciales() }} />
+          <CentroEvaluacion 
+            servicio={servicioHomologacion} 
+            rolUsuario={rolUsuarioActual}
+            onClose={() => setMostrarModalHomologacion(false)} 
+            onActualizado={() => { setMostrarModalHomologacion(false); cargarDatosIniciales() }} 
+          />
         )}
 
       </div>

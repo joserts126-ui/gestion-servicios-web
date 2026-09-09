@@ -75,7 +75,8 @@ const TablaResultados = ({ cotizacionesParticipantes, calcularNotaIntegral, idGa
 // ==========================================
 // COMPONENTE PRINCIPAL (ORQUESTADOR)
 // ==========================================
-export default function MatrizComparativa({ servicio, cotizacionesParticipantes, categoriasHomologacion, itemsCotizaciones, edicionMatriz, handleEdicionMatriz, puntajesEvaluacion, handlePuntajeChange, calcularNotaIntegral, idGanador, N, minContainerWidth }) {
+// NUEVO: Agregamos "esVisor" a los props que recibe la función
+export default function MatrizComparativa({ servicio, cotizacionesParticipantes, categoriasHomologacion, itemsCotizaciones, edicionMatriz, handleEdicionMatriz, puntajesEvaluacion, handlePuntajeChange, calcularNotaIntegral, idGanador, N, minContainerWidth, esVisor }) {
   
   const getMoneda = (cot) => cot.moneda?.moneda?.toUpperCase().includes('USD') ? '$' : 'S/';
 
@@ -199,8 +200,8 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
 
                 return (
                   <React.Fragment key={`eco-data-${keyEdicion}`}>
-                    <td style={{ ...tdCenter, padding: '2px' }}><input type="text" value={und} onChange={(e) => handleEdicionMatriz(cat.idcategoria, cot.idcotizacion, 'und', e.target.value.toUpperCase())} style={inputStyleMatriz} /></td>
-                    <td style={{ ...tdCenter, padding: '2px' }}><input type="text" value={cantInput} onChange={(e) => handleEdicionMatriz(cat.idcategoria, cot.idcotizacion, 'cant', e.target.value)} style={inputStyleMatriz} /></td>
+                    <td style={{ ...tdCenter, padding: '2px' }}><input type="text" disabled={esVisor} value={und} onChange={(e) => handleEdicionMatriz(cat.idcategoria, cot.idcotizacion, 'und', e.target.value.toUpperCase())} style={inputStyleMatriz} /></td>
+                    <td style={{ ...tdCenter, padding: '2px' }}><input type="text" disabled={esVisor} value={cantInput} onChange={(e) => handleEdicionMatriz(cat.idcategoria, cot.idcotizacion, 'cant', e.target.value)} style={inputStyleMatriz} /></td>
                     
                     {parcial > 0 ? (
                       <>
@@ -210,11 +211,12 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
                     ) : (
                       <td colSpan="2" style={{ ...tdCenter, padding: '2px', verticalAlign: 'middle' }}>
                         <select 
+                          disabled={esVisor}
                           value={estadoItem} 
                           onChange={(e) => handleEdicionMatriz(cat.idcategoria, cot.idcotizacion, 'estado', e.target.value)}
                           style={{
                             ...inputStyleMatriz,
-                            cursor: 'pointer',
+                            cursor: esVisor ? 'default' : 'pointer',
                             color: estadoItem === 'NO CONTEMPLA' ? '#DC2626' : (estadoItem === 'SI CONTEMPLA' ? '#16A34A' : '#64748B')
                           }}
                         >
@@ -283,7 +285,7 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
             <td colSpan="2" style={tdPdf}>{isCompact ? 'PUNTAJE - EV. ECONÓMICA' : 'PUNTAJE - EVALUACIÓN ECONÓMICA'}</td><td style={tdCenter}>5.00</td>
             {cotizacionesParticipantes.map(cot => (
               <td colSpan="4" key={`peco-${cot.idcotizacion}`} style={{ ...tdCenter, padding: '2px' }}>
-                <input type="number" min="0" max="5" step="0.1" value={puntajesEvaluacion[cot.idcotizacion]?.eco} onChange={(e) => handlePuntajeChange(cot.idcotizacion, 'eco', e.target.value)} style={inputStyleMatriz} />
+                <input type="number" disabled={esVisor} min="0" max="5" step="0.1" value={puntajesEvaluacion[cot.idcotizacion]?.eco} onChange={(e) => handlePuntajeChange(cot.idcotizacion, 'eco', e.target.value)} style={inputStyleMatriz} />
               </td>
             ))}
           </tr>
@@ -317,7 +319,7 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
             <td colSpan="2" style={tdPdf}>{isCompact ? 'PUNTAJE - EV. PLAZO' : 'PUNTAJE - EVALUACIÓN DE PLAZO'}</td><td style={tdCenter}>5.00</td>
             {cotizacionesParticipantes.map(cot => (
               <td colSpan="4" key={`pplz-${cot.idcotizacion}`} style={{ ...tdCenter, padding: '2px' }}>
-                <input type="number" min="0" max="5" step="0.1" value={puntajesEvaluacion[cot.idcotizacion]?.plazo} onChange={(e) => handlePuntajeChange(cot.idcotizacion, 'plazo', e.target.value)} style={inputStyleMatriz} />
+                <input type="number" disabled={esVisor} min="0" max="5" step="0.1" value={puntajesEvaluacion[cot.idcotizacion]?.plazo} onChange={(e) => handlePuntajeChange(cot.idcotizacion, 'plazo', e.target.value)} style={inputStyleMatriz} />
               </td>
             ))}
           </tr>
@@ -365,7 +367,7 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
             <td colSpan="2" style={tdPdf}>{isCompact ? 'PUNTAJE - CUMP. ALCANCES' : 'PUNTAJE - CUMPLIMIENTO DE ALCANCES'}</td><td style={tdCenter}>5.00</td>
             {cotizacionesParticipantes.map(cot => (
               <td colSpan="4" key={`palc-${cot.idcotizacion}`} style={{ ...tdCenter, padding: '2px' }}>
-                <input type="number" min="0" max="5" step="0.1" value={puntajesEvaluacion[cot.idcotizacion]?.alcance} onChange={(e) => handlePuntajeChange(cot.idcotizacion, 'alcance', e.target.value)} style={inputStyleMatriz} />
+                <input type="number" disabled={esVisor} min="0" max="5" step="0.1" value={puntajesEvaluacion[cot.idcotizacion]?.alcance} onChange={(e) => handlePuntajeChange(cot.idcotizacion, 'alcance', e.target.value)} style={inputStyleMatriz} />
               </td>
             ))}
           </tr>
@@ -408,7 +410,7 @@ export default function MatrizComparativa({ servicio, cotizacionesParticipantes,
             <td colSpan="2" style={tdPdf}>{isCompact ? 'PUNTAJE - EV. PAGO' : 'PUNTAJE - EVALUACIÓN DE FORMA DE PAGO'}</td><td style={tdCenter}>5.00</td>
             {cotizacionesParticipantes.map(cot => (
               <td colSpan="4" key={`ppag-${cot.idcotizacion}`} style={{ ...tdCenter, padding: '2px' }}>
-                <input type="number" min="0" max="5" step="0.1" value={puntajesEvaluacion[cot.idcotizacion]?.pago} onChange={(e) => handlePuntajeChange(cot.idcotizacion, 'pago', e.target.value)} style={inputStyleMatriz} />
+                <input type="number" disabled={esVisor} min="0" max="5" step="0.1" value={puntajesEvaluacion[cot.idcotizacion]?.pago} onChange={(e) => handlePuntajeChange(cot.idcotizacion, 'pago', e.target.value)} style={inputStyleMatriz} />
               </td>
             ))}
           </tr>

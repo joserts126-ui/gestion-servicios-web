@@ -27,6 +27,7 @@ function Cotizaciones() {
   
   const [idUsuarioActual, setIdUsuarioActual] = useState('')
   const [nombreUsuarioActual, setNombreUsuarioActual] = useState('Cargando...')
+  const [rolUsuarioActual, setRolUsuarioActual] = useState('ADMIN') // NUEVO: Estado del rol
   const [defUnidadId, setDefUnidadId] = useState('')
   const [defImpuestoId, setDefImpuestoId] = useState('')
 
@@ -64,6 +65,8 @@ function Cotizaciones() {
   const [plazoDias, setPlazoDias] = useState('')
   const [entregables, setEntregables] = useState('')
 
+  const esVisor = rolUsuarioActual === 'VISOR'; // NUEVO: Variable de control
+
   const cargarDatos = async () => {
     setCargando(true)
     const { data: dataSrv } = await supabase.from('servicios').select('servicio').eq('idservicio', id).single()
@@ -72,10 +75,10 @@ function Cotizaciones() {
     const { data: dataCot } = await supabase.from('cotizaciones').select('*, proveedor(razonsocial), moneda(moneda), detallecotizacion(cantidad, preciounitario, idimpuestos), usuario(nombre)').eq('idservicio', id)
     if (dataCot) setListaCotizaciones(dataCot)
 
-    const [resProv, resMon, resFPago, resUni, resImp, resUsu] = await Promise.all([
+    const [resProv, resMon, resFPago, resUni, resImp] = await Promise.all([
       supabase.from('proveedor').select('*').eq('activo', true), supabase.from('moneda').select('*'),
       supabase.from('formapago').select('*').eq('activo', true), supabase.from('unidadmedida').select('*').eq('activo', true),
-      supabase.from('impuestos').select('*'), supabase.from('usuario').select('*').eq('activo', true) 
+      supabase.from('impuestos').select('*')
     ])
     
     if (resProv.data) setCatProveedores(resProv.data)
@@ -88,7 +91,17 @@ function Cotizaciones() {
     if (resUni.data) { const u = resUni.data.find(x => x.unidadmedida === 'UND - Unidad'); if (u) { dUni = u.idunidad; setDefUnidadId(dUni) } }
     if (resImp.data) { const i = resImp.data.find(x => x.impuesto === 'Incluido IGV'); if (i) { dImp = i.idimpuestos; setDefImpuestoId(dImp) } }
 
-    if (resUsu.data && resUsu.data.length > 0) { setIdUsuarioActual(resUsu.data[0].idusuario); setNombreUsuarioActual(resUsu.data[0].nombre) }
+    // NUEVO: Leemos al usuario desde la credencial del navegador
+    const usuarioGuardado = localStorage.getItem('usuarioApp');
+    if (usuarioGuardado) {
+      const userObj = JSON.parse(usuarioGuardado);
+      setIdUsuarioActual(userObj.idusuario);
+      setNombreUsuarioActual(userObj.nombre);
+      setRolUsuarioActual(userObj.rol || 'ADMIN');
+    } else {
+      navigate('/');
+    }
+    
     setCargando(false)
   }
 
@@ -203,17 +216,17 @@ function Cotizaciones() {
   const handleGuardarTodo = async (e) => {
     e.preventDefault()
     
-    // LÓGICA FLEXIBLE: Solo validamos estrictamente si el estado NO es "Solicitada"
-    if (!rucProveedor) { alert("Debe seleccionar al proveedor."); return }
-    
-    const detallesValidos = detalles.filter(d => d.item && d.item.trim() !== '');
-    
-    if (estadoCotizacion !== 'Solicitada') {
-      if (!idFormaPago || !idMoneda) { alert("Para registrar una cotización como recibida o procesada, complete Forma de Pago y Moneda."); return }
-      if (detallesValidos.length === 0) { alert("Debe tener al menos un ítem descrito para guardar los precios."); return }
-      for (let i = 0; i < detallesValidos.length; i++) {
-        if (detallesValidos[i].cantidad <= 0 || detallesValidos[i].precioUnitario <= 0) { 
-          alert(`Fila con ítem "${detallesValidos[i].item}" tiene cantidad o precio inválido.`); return 
+    // VISOR BLOCK: Solo validamos estrictamente comercial si NO es visor
+    if (!esVisor) {
+      if (!rucProveedor) { alert("Debe seleccionar al proveedor."); return }
+      const detallesValidos = detalles.filter(d => d.item && d.item.trim() !== '');
+      if (estadoCotizacion !== 'Solicitada') {
+        if (!idFormaPago || !idMoneda) { alert("Para registrar una cotización como recibida o procesada, complete Forma de Pago y Moneda."); return }
+        if (detallesValidos.length === 0) { alert("Debe tener al menos un ítem descrito para guardar los precios."); return }
+        for (let i = 0; i < detallesValidos.length; i++) {
+          if (detallesValidos[i].cantidad <= 0 || detallesValidos[i].precioUnitario <= 0) { 
+            alert(`Fila con ítem "${detallesValidos[i].item}" tiene cantidad o precio inválido.`); return 
+          }
         }
       }
     }
@@ -221,33 +234,39 @@ function Cotizaciones() {
     setGuardando(true)
     try {
       let idCotizacionFinal = idCotizacionActual
-      const payloadCabecera = {
-        ruc: rucProveedor, idformapago: idFormaPago || null, idmoneda: idMoneda || null, estado: estadoCotizacion,
-        fecha_envio_cotizacion: fechaEnvioCotizacion || null, fecha_visita_tecnica: fechaVisitaTecnica || null,
-        fecharecepcion: fechaRecepcion || null, fechaaceptacion: fechaAceptacion || null, fechainicio: fechaInicio || null, fechafin: fechaFin || null,
-        gastos_generales: gastosGenerales, utilidades: utilidades, plazo_dias: plazoDias, entregables: entregables
+
+      // Si NO es visor, actualizamos toda la data comercial
+      if (!esVisor) {
+        const payloadCabecera = {
+          ruc: rucProveedor, idformapago: idFormaPago || null, idmoneda: idMoneda || null, estado: estadoCotizacion,
+          fecha_envio_cotizacion: fechaEnvioCotizacion || null, fecha_visita_tecnica: fechaVisitaTecnica || null,
+          fecharecepcion: fechaRecepcion || null, fechaaceptacion: fechaAceptacion || null, fechainicio: fechaInicio || null, fechafin: fechaFin || null,
+          gastos_generales: gastosGenerales, utilidades: utilidades, plazo_dias: plazoDias, entregables: entregables
+        }
+
+        if (modoEdicion) {
+          const { error: errUpdate } = await supabase.from('cotizaciones').update(payloadCabecera).eq('idcotizacion', idCotizacionFinal)
+          if (errUpdate) throw errUpdate
+          await supabase.from('detallecotizacion').delete().eq('idcotizacion', idCotizacionFinal)
+        } else {
+          payloadCabecera.idservicio = id
+          payloadCabecera.idusuario = idUsuarioActual || null
+          const { data: nuevaCotizacion, error: errCotizacion } = await supabase.from('cotizaciones').insert([payloadCabecera]).select()
+          if (errCotizacion) throw errCotizacion
+          idCotizacionFinal = nuevaCotizacion[0].idcotizacion
+        }
+
+        const detallesValidos = detalles.filter(d => d.item && d.item.trim() !== '');
+        if (detallesValidos.length > 0) {
+          const detallesFormateados = detallesValidos.map(d => ({
+            idcotizacion: idCotizacionFinal, item: d.item, cantidad: d.cantidad, idunidad: d.idUnidad || null, preciounitario: d.precioUnitario, idimpuestos: d.idImpuestos || null
+          }))
+          const { error: errDetalles } = await supabase.from('detallecotizacion').insert(detallesFormateados)
+          if (errDetalles) throw errDetalles
+        }
       }
 
-      if (modoEdicion) {
-        const { error: errUpdate } = await supabase.from('cotizaciones').update(payloadCabecera).eq('idcotizacion', idCotizacionFinal)
-        if (errUpdate) throw errUpdate
-        await supabase.from('detallecotizacion').delete().eq('idcotizacion', idCotizacionFinal)
-      } else {
-        payloadCabecera.idservicio = id
-        payloadCabecera.idusuario = idUsuarioActual || null
-        const { data: nuevaCotizacion, error: errCotizacion } = await supabase.from('cotizaciones').insert([payloadCabecera]).select()
-        if (errCotizacion) throw errCotizacion
-        idCotizacionFinal = nuevaCotizacion[0].idcotizacion
-      }
-
-      if (detallesValidos.length > 0) {
-        const detallesFormateados = detallesValidos.map(d => ({
-          idcotizacion: idCotizacionFinal, item: d.item, cantidad: d.cantidad, idunidad: d.idUnidad || null, preciounitario: d.precioUnitario, idimpuestos: d.idImpuestos || null
-        }))
-        const { error: errDetalles } = await supabase.from('detallecotizacion').insert(detallesFormateados)
-        if (errDetalles) throw errDetalles
-      }
-
+      // ESTO LO PUEDEN HACER AMBOS (ADMIN Y VISOR): Comentarios y Documentos
       const todosLosComentarios = [...listaComentariosNuevos]
       if (comentarioTexto.trim() !== '') todosLosComentarios.push(comentarioTexto)
       if (todosLosComentarios.length > 0) {
@@ -274,7 +293,7 @@ function Cotizaciones() {
   }
 
   const theme = { bgApp: '#F8FAFC', bgCard: '#FFFFFF', textMain: '#1E293B', textMuted: '#64748B', border: '#E2E8F0', primary: '#2563EB', success: '#16A34A', inputBg: '#FFFFFF', danger: '#DC2626' }
-  const inputStyle = { width: '100%', padding: '10px 12px', borderRadius: '6px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg, color: theme.textMain, fontSize: '14px', outline: 'none', boxSizing: 'border-box', transition: 'border 0.2s ease' }
+  const inputStyle = { width: '100%', padding: '10px 12px', borderRadius: '6px', border: `1px solid ${theme.border}`, backgroundColor: esVisor ? '#F1F5F9' : theme.inputBg, color: esVisor ? theme.textMuted : theme.textMain, fontSize: '14px', outline: 'none', boxSizing: 'border-box', transition: 'border 0.2s ease' }
   const labelStyle = { display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: theme.textMain }
   const cardStyle = { backgroundColor: theme.bgCard, border: `1px solid ${theme.border}`, borderRadius: '12px', padding: '24px', marginBottom: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }
   const thStyle = { padding: '16px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: theme.textMuted, cursor: 'pointer', userSelect: 'none', backgroundColor: '#F1F5F9', borderBottom: `2px solid ${theme.border}` }
@@ -300,11 +319,13 @@ function Cotizaciones() {
             <button onClick={() => navigate('/servicios')} style={{ marginBottom: '16px', padding: '8px 16px', backgroundColor: theme.bgCard, border: `1px solid ${theme.border}`, borderRadius: '6px', cursor: 'pointer', fontWeight: '600', color: theme.textMuted, transition: '0.2s', display: 'flex', alignItems: 'center', gap: '8px' }}>← Volver a Servicios</button>
             <h2 style={{ margin: '0 0 4px 0', color: theme.textMain, fontSize: '24px', fontWeight: '700' }}>Cotizaciones del Servicio #{id}</h2>
             <p style={{ margin: '0 0 20px 0', color: theme.textMuted, fontSize: '15px' }}>{cargando ? 'Cargando detalle...' : servicioActual}</p>
-            <input type="text" placeholder="🔍 Buscar por proveedor, estado, moneda o creador..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{ padding: '12px 16px', width: '450px', borderRadius: '8px', border: `1px solid ${theme.border}`, outline: 'none', backgroundColor: theme.bgCard, color: theme.textMain, fontSize: '14px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }} />
+            <input type="text" placeholder="🔍 Buscar por proveedor o estado..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{ padding: '12px 16px', width: '450px', borderRadius: '8px', border: `1px solid ${theme.border}`, outline: 'none', backgroundColor: theme.bgCard, color: theme.textMain, fontSize: '14px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }} />
           </div>
           <div style={{ display: 'flex', gap: '12px' }}>
              <button onClick={() => navigate('/servicios')} style={{ padding: '12px 24px', backgroundColor: '#F8FAFC', color: theme.textMain, border: `1px solid ${theme.border}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '700', fontSize: '14px' }}>📊 Ir a Matriz</button>
-             <button onClick={abrirModalNuevo} style={{ padding: '12px 24px', backgroundColor: theme.primary, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '14px', boxShadow: '0 4px 6px rgba(37,99,235,0.2)' }}>+ Nueva Cotización</button>
+             {!esVisor && (
+               <button onClick={abrirModalNuevo} style={{ padding: '12px 24px', backgroundColor: theme.primary, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '14px', boxShadow: '0 4px 6px rgba(37,99,235,0.2)' }}>+ Nueva Cotización</button>
+             )}
           </div>
         </div>
 
@@ -338,7 +359,11 @@ function Cotizaciones() {
                         <td style={{ ...tdStyle, color: theme.textMuted }}>{cot.usuario ? cot.usuario.nombre : 'Sistema'}</td>
                         <td style={{ ...tdStyle, textAlign: 'right', fontWeight: '700', fontSize: '15px' }}>{cot.moneda?.moneda?.includes('USD') ? '$' : 'S/'} {calcularTotalGuardado(cot).toFixed(2)}</td>
                         <td style={{ ...tdStyle, textAlign: 'center' }}><span style={{ padding: '6px 12px', backgroundColor: statusStyle.bg, color: statusStyle.text, borderRadius: '20px', fontSize: '12px', fontWeight: '700' }}>{cot.estado}</span></td>
-                        <td style={{ ...tdStyle, textAlign: 'center' }}><button onClick={() => abrirModalEditar(cot)} style={{ padding: '8px 16px', cursor: 'pointer', backgroundColor: theme.bgCard, border: `1px solid ${theme.border}`, borderRadius: '6px', fontWeight: '600', color: theme.textMain }}>Ver Detalle</button></td>
+                        <td style={{ ...tdStyle, textAlign: 'center' }}>
+                          <button onClick={() => abrirModalEditar(cot)} style={{ padding: '8px 16px', cursor: 'pointer', backgroundColor: theme.bgCard, border: `1px solid ${theme.border}`, borderRadius: '6px', fontWeight: '600', color: theme.textMain }}>
+                            {esVisor ? '👁️ Ver Detalle' : '✏️ Editar'}
+                          </button>
+                        </td>
                       </tr>
                     )
                   })
@@ -353,15 +378,12 @@ function Cotizaciones() {
             <div style={{ backgroundColor: theme.bgApp, padding: '0', borderRadius: '16px', width: '95%', maxWidth: '1200px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
               
               <div style={{ position: 'sticky', top: 0, backgroundColor: theme.bgCard, zIndex: 10, padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${theme.border}` }}>
-                <h3 style={{ margin: 0, color: theme.textMain, fontSize: '20px', fontWeight: '700' }}>{modoEdicion ? `Gestión de Cotización #${idCotizacionActual}` : 'Nueva Cotización'}</h3>
+                <h3 style={{ margin: 0, color: theme.textMain, fontSize: '20px', fontWeight: '700' }}>{modoEdicion ? `Cotización #${idCotizacionActual}` : 'Nueva Cotización'}</h3>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <span style={{ fontSize: '14px', fontWeight: '600', color: theme.textMuted }}>Estado de la propuesta:</span>
-                  <select value={estadoCotizacion} onChange={(e) => setEstadoCotizacion(e.target.value)} style={{ padding: '8px 16px', borderRadius: '8px', border: `1px solid ${theme.border}`, fontWeight: '700', backgroundColor: theme.inputBg, color: theme.textMain, cursor: 'pointer' }}>
-                    <option value="Solicitada">Solicitada</option>
-                    <option value="Entregada">Entregada / Recibida</option>
-                    <option value="Aprobada">Aprobada</option>
-                    <option value="Rechazada">Rechazada</option>
-                    <option value="De Baja">De Baja</option>
+                  <select disabled={esVisor} value={estadoCotizacion} onChange={(e) => setEstadoCotizacion(e.target.value)} style={{ padding: '8px 16px', borderRadius: '8px', border: `1px solid ${theme.border}`, fontWeight: '700', backgroundColor: esVisor ? '#F1F5F9' : theme.inputBg, color: theme.textMain, cursor: esVisor ? 'default' : 'pointer' }}>
+                    <option value="Solicitada">Solicitada</option><option value="Entregada">Entregada / Recibida</option>
+                    <option value="Aprobada">Aprobada</option><option value="Rechazada">Rechazada</option><option value="De Baja">De Baja</option>
                   </select>
                   <button onClick={() => setMostrarModal(false)} style={{ background: 'none', border: 'none', fontSize: '24px', color: theme.textMuted, cursor: 'pointer', marginLeft: '10px' }}>×</button>
                 </div>
@@ -371,54 +393,57 @@ function Cotizaciones() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px' }}>
                   <div style={cardStyle}>
                     <h4 style={{ margin: '0 0 20px 0', color: theme.textMain, fontSize: '16px', borderBottom: `1px solid ${theme.border}`, paddingBottom: '12px' }}>1. Proveedor y Finanzas</h4>
-                    <div style={{ marginBottom: '16px' }}><label style={labelStyle}>Proveedor (Solicitado o Contratado) *</label><select required value={rucProveedor} onChange={(e) => setRucProveedor(e.target.value)} style={inputStyle}><option value="">-- Seleccionar --</option>{catProveedores.map(p => <option key={p.ruc} value={p.ruc}>{p.ruc} - {p.razonsocial}</option>)}</select></div>
+                    <div style={{ marginBottom: '16px' }}><label style={labelStyle}>Proveedor (Solicitado o Contratado) *</label><select disabled={esVisor} required value={rucProveedor} onChange={(e) => setRucProveedor(e.target.value)} style={inputStyle}><option value="">-- Seleccionar --</option>{catProveedores.map(p => <option key={p.ruc} value={p.ruc}>{p.ruc} - {p.razonsocial}</option>)}</select></div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                      <div><label style={labelStyle}>Condición de Pago (Si ya cotizó)</label><select value={idFormaPago} onChange={(e) => setIdFormaPago(e.target.value)} style={inputStyle}><option value="">-- Opcional --</option>{catFormasPago.map(f => <option key={f.idformapago} value={f.idformapago}>{f.formapago}</option>)}</select></div>
-                      <div><label style={labelStyle}>Moneda de Facturación</label><select value={idMoneda} onChange={(e) => setIdMoneda(e.target.value)} style={inputStyle}><option value="">-- Opcional --</option>{catMonedas.map(m => <option key={m.idmoneda} value={m.idmoneda}>{m.moneda}</option>)}</select></div>
+                      <div><label style={labelStyle}>Condición de Pago (Si ya cotizó)</label><select disabled={esVisor} value={idFormaPago} onChange={(e) => setIdFormaPago(e.target.value)} style={inputStyle}><option value="">-- Opcional --</option>{catFormasPago.map(f => <option key={f.idformapago} value={f.idformapago}>{f.formapago}</option>)}</select></div>
+                      <div><label style={labelStyle}>Moneda de Facturación</label><select disabled={esVisor} value={idMoneda} onChange={(e) => setIdMoneda(e.target.value)} style={inputStyle}><option value="">-- Opcional --</option>{catMonedas.map(m => <option key={m.idmoneda} value={m.idmoneda}>{m.moneda}</option>)}</select></div>
                     </div>
                   </div>
 
                   <div style={cardStyle}>
                     <h4 style={{ margin: '0 0 20px 0', color: theme.textMain, fontSize: '16px', borderBottom: `1px solid ${theme.border}`, paddingBottom: '12px' }}>2. Cronograma y Alcance</h4>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
-                      <div><label style={labelStyle}>F. Envío de Solicitud</label><input type="date" value={fechaEnvioCotizacion} onChange={(e) => setFechaEnvioCotizacion(e.target.value)} style={inputStyle} /></div>
-                      <div><label style={labelStyle}>F. Visita Técnica</label><input type="date" value={fechaVisitaTecnica} onChange={(e) => setFechaVisitaTecnica(e.target.value)} style={inputStyle} /></div>
+                      <div><label style={labelStyle}>F. Envío de Solicitud</label><input type="date" disabled={esVisor} value={fechaEnvioCotizacion} onChange={(e) => setFechaEnvioCotizacion(e.target.value)} style={inputStyle} /></div>
+                      <div><label style={labelStyle}>F. Visita Técnica</label><input type="date" disabled={esVisor} value={fechaVisitaTecnica} onChange={(e) => setFechaVisitaTecnica(e.target.value)} style={inputStyle} /></div>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
-                      <div><label style={labelStyle}>Recepción de Doc.</label><input type="date" value={fechaRecepcion} onChange={(e) => setFechaRecepcion(e.target.value)} style={inputStyle} /></div>
-                      <div><label style={labelStyle}>Aceptación (Aprobación)</label><input type="date" value={fechaAceptacion} onChange={(e) => setFechaAceptacion(e.target.value)} style={inputStyle} /></div>
+                      <div><label style={labelStyle}>Recepción de Doc.</label><input type="date" disabled={esVisor} value={fechaRecepcion} onChange={(e) => setFechaRecepcion(e.target.value)} style={inputStyle} /></div>
+                      <div><label style={labelStyle}>Aceptación (Aprobación)</label><input type="date" disabled={esVisor} value={fechaAceptacion} onChange={(e) => setFechaAceptacion(e.target.value)} style={inputStyle} /></div>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
-                      <div><label style={labelStyle}>Inicio de Servicio</label><input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} style={inputStyle} /></div>
-                      <div><label style={labelStyle}>Fin Estimado</label><input type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} style={inputStyle} /></div>
+                      <div><label style={labelStyle}>Inicio de Servicio</label><input type="date" disabled={esVisor} value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} style={inputStyle} /></div>
+                      <div><label style={labelStyle}>Fin Estimado</label><input type="date" disabled={esVisor} value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} style={inputStyle} /></div>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                      <div><label style={labelStyle}>Plazo Propuesto</label><input type="text" placeholder="Ej: 7 días calendario" value={plazoDias} onChange={(e) => setPlazoDias(e.target.value)} style={inputStyle} /></div>
-                      <div><label style={labelStyle}>Entregables / Alcance</label><input type="text" placeholder="Ej: Certificado" value={entregables} onChange={(e) => setEntregables(e.target.value)} style={inputStyle} /></div>
+                      <div><label style={labelStyle}>Plazo Propuesto</label><input type="text" disabled={esVisor} placeholder="Ej: 7 días" value={plazoDias} onChange={(e) => setPlazoDias(e.target.value)} style={inputStyle} /></div>
+                      <div><label style={labelStyle}>Entregables / Alcance</label><input type="text" disabled={esVisor} placeholder="Ej: Certificado" value={entregables} onChange={(e) => setEntregables(e.target.value)} style={inputStyle} /></div>
                     </div>
                   </div>
                 </div>
 
                 <div style={cardStyle}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}><h4 style={{ margin: 0, color: theme.textMain, fontSize: '16px' }}>3. Estructura de Costos (Desglose)</h4><button type="button" onClick={agregarFila} style={{ padding: '8px 16px', backgroundColor: '#EFF6FF', color: theme.primary, border: `1px solid #BFDBFE`, borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: '700' }}>+ Añadir Fila</button></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                    <h4 style={{ margin: 0, color: theme.textMain, fontSize: '16px' }}>3. Estructura de Costos (Desglose)</h4>
+                    {!esVisor && <button type="button" onClick={agregarFila} style={{ padding: '8px 16px', backgroundColor: '#EFF6FF', color: theme.primary, border: `1px solid #BFDBFE`, borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: '700' }}>+ Añadir Fila</button>}
+                  </div>
                   <div style={{ overflowX: 'auto' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '3fr 1.5fr 1.5fr 1fr 1.5fr 1.5fr 40px', gap: '12px', padding: '12px', backgroundColor: '#F1F5F9', borderRadius: '8px', marginBottom: '12px' }}><div style={labelStyle}>Ítem / Descripción *</div><div style={labelStyle}>Unidad de Medida</div><div style={labelStyle}>Afectación IGV</div><div style={labelStyle}>Cant. *</div><div style={labelStyle}>Precio Unitario *</div><div style={{...labelStyle, textAlign: 'right'}}>Subtotal Fila</div><div></div></div>
                     {detalles.map((fila, index) => (
                       <div key={index} style={{ display: 'grid', gridTemplateColumns: '3fr 1.5fr 1.5fr 1fr 1.5fr 1.5fr 40px', gap: '12px', marginBottom: '12px', alignItems: 'center' }}>
-                        <input type="text" placeholder="Describe el material o servicio..." value={fila.item} onChange={(e) => actualizarFila(index, 'item', e.target.value)} style={inputStyle} />
-                        <select value={fila.idUnidad} onChange={(e) => actualizarFila(index, 'idUnidad', e.target.value)} style={inputStyle}>{catUnidades.map(u => <option key={u.idunidad} value={u.idunidad}>{u.unidadmedida}</option>)}</select>
-                        <select value={fila.idImpuestos} onChange={(e) => actualizarFila(index, 'idImpuestos', e.target.value)} style={inputStyle}>{catImpuestos.map(i => <option key={i.idimpuestos} value={i.idimpuestos}>{i.impuesto}</option>)}</select>
-                        <input type="number" min="0.01" step="any" value={fila.cantidad} onChange={(e) => actualizarFila(index, 'cantidad', parseFloat(e.target.value) || 0)} style={inputStyle} />
-                        <input type="number" min="0" step="0.01" value={fila.precioUnitario} onChange={(e) => actualizarFila(index, 'precioUnitario', parseFloat(e.target.value) || 0)} style={inputStyle} />
+                        <input type="text" disabled={esVisor} placeholder="Describe el material o servicio..." value={fila.item} onChange={(e) => actualizarFila(index, 'item', e.target.value)} style={inputStyle} />
+                        <select disabled={esVisor} value={fila.idUnidad} onChange={(e) => actualizarFila(index, 'idUnidad', e.target.value)} style={inputStyle}>{catUnidades.map(u => <option key={u.idunidad} value={u.idunidad}>{u.unidadmedida}</option>)}</select>
+                        <select disabled={esVisor} value={fila.idImpuestos} onChange={(e) => actualizarFila(index, 'idImpuestos', e.target.value)} style={inputStyle}>{catImpuestos.map(i => <option key={i.idimpuestos} value={i.idimpuestos}>{i.impuesto}</option>)}</select>
+                        <input type="number" disabled={esVisor} min="0.01" step="any" value={fila.cantidad} onChange={(e) => actualizarFila(index, 'cantidad', parseFloat(e.target.value) || 0)} style={inputStyle} />
+                        <input type="number" disabled={esVisor} min="0" step="0.01" value={fila.precioUnitario} onChange={(e) => actualizarFila(index, 'precioUnitario', parseFloat(e.target.value) || 0)} style={inputStyle} />
                         <div style={{ padding: '10px 12px', backgroundColor: theme.bgApp, border: `1px solid ${theme.border}`, borderRadius: '6px', textAlign: 'right', fontSize: '14px', fontWeight: '600', color: theme.textMain }}>{(fila.cantidad * fila.precioUnitario).toFixed(2)}</div>
-                        <button type="button" onClick={() => eliminarFila(index)} disabled={detalles.length === 1} style={{ padding: '10px', backgroundColor: detalles.length > 1 ? theme.danger : '#E2E8F0', color: 'white', border: 'none', borderRadius: '6px', cursor: detalles.length > 1 ? 'pointer' : 'not-allowed', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>✕</button>
+                        {!esVisor && <button type="button" onClick={() => eliminarFila(index)} disabled={detalles.length === 1} style={{ padding: '10px', backgroundColor: detalles.length > 1 ? theme.danger : '#E2E8F0', color: 'white', border: 'none', borderRadius: '6px', cursor: detalles.length > 1 ? 'pointer' : 'not-allowed', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>✕</button>}
                       </div>
                     ))}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginTop: '32px', paddingTop: '24px', borderTop: `1px dashed ${theme.border}` }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '180px 150px', gap: '16px', textAlign: 'right', fontSize: '14px', marginBottom: '8px' }}><div style={{ color: theme.textMuted, fontWeight: '600' }}>Costo Directo Neto:</div><div style={{ color: theme.textMain, fontWeight: '700' }}>{totales.costoDirecto.toFixed(2)}</div></div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '180px 150px', gap: '16px', textAlign: 'right', fontSize: '14px', marginBottom: '8px', alignItems: 'center' }}><div style={{ color: theme.textMuted }}>+ Gastos Generales:</div><input type="number" min="0" step="0.01" value={gastosGenerales} onChange={(e) => setGastosGenerales(parseFloat(e.target.value) || 0)} style={{...inputStyle, padding: '4px 8px', textAlign: 'right'}} /></div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '180px 150px', gap: '16px', textAlign: 'right', fontSize: '14px', marginBottom: '16px', alignItems: 'center' }}><div style={{ color: theme.textMuted }}>+ Utilidades:</div><input type="number" min="0" step="0.01" value={utilidades} onChange={(e) => setUtilidades(parseFloat(e.target.value) || 0)} style={{...inputStyle, padding: '4px 8px', textAlign: 'right'}} /></div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '180px 150px', gap: '16px', textAlign: 'right', fontSize: '14px', marginBottom: '8px', alignItems: 'center' }}><div style={{ color: theme.textMuted }}>+ Gastos Generales:</div><input type="number" disabled={esVisor} min="0" step="0.01" value={gastosGenerales} onChange={(e) => setGastosGenerales(parseFloat(e.target.value) || 0)} style={{...inputStyle, padding: '4px 8px', textAlign: 'right'}} /></div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '180px 150px', gap: '16px', textAlign: 'right', fontSize: '14px', marginBottom: '16px', alignItems: 'center' }}><div style={{ color: theme.textMuted }}>+ Utilidades:</div><input type="number" disabled={esVisor} min="0" step="0.01" value={utilidades} onChange={(e) => setUtilidades(parseFloat(e.target.value) || 0)} style={{...inputStyle, padding: '4px 8px', textAlign: 'right'}} /></div>
                     <div style={{ display: 'grid', gridTemplateColumns: '180px 150px', gap: '16px', textAlign: 'right', fontSize: '15px', marginBottom: '8px', borderTop: `1px solid ${theme.border}`, paddingTop: '8px' }}><div style={{ color: theme.textMain, fontWeight: '700' }}>SUB-TOTAL:</div><div style={{ color: theme.textMain, fontWeight: '800' }}>{totales.subtotal.toFixed(2)}</div></div>
                     <div style={{ display: 'grid', gridTemplateColumns: '180px 150px', gap: '16px', textAlign: 'right', fontSize: '14px', marginBottom: '16px', color: theme.textMuted }}><div>IGV (18%):</div><div>{totales.igv.toFixed(2)}</div></div>
                     <div style={{ display: 'grid', gridTemplateColumns: '150px 150px', gap: '16px', textAlign: 'right', fontSize: '20px', fontWeight: '800', color: theme.success, backgroundColor: '#F0FDF4', padding: '16px', borderRadius: '8px' }}><div>TOTAL FINAL:</div><div>{totales.total.toFixed(2)}</div></div>
@@ -435,15 +460,16 @@ function Cotizaciones() {
                             <span style={{ fontSize: '13px', fontWeight: '600', color: theme.textMain }}>📎 {arch.descripcion}</span>
                             <div style={{ display: 'flex', gap: '8px' }}>
                               <a href={arch.archivo} target="_blank" rel="noreferrer" style={{ color: theme.primary, textDecoration: 'none', fontSize: '13px', fontWeight: '600', backgroundColor: '#EFF6FF', padding: '6px 12px', borderRadius: '4px' }}>Abrir</a>
-                              <button type="button" onClick={() => handleEliminarArchivo(arch.idarchivo, arch.archivo)} style={{ color: theme.danger, backgroundColor: '#FEF2F2', border: `1px solid #FCA5A5`, padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>Borrar</button>
+                              {!esVisor && <button type="button" onClick={() => handleEliminarArchivo(arch.idarchivo, arch.archivo)} style={{ color: theme.danger, backgroundColor: '#FEF2F2', border: `1px solid #FCA5A5`, padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>Borrar</button>}
                             </div>
                           </div>
                         ))}
                       </div>
                     )}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {/* AMBOS ROLES PUEDEN SUBIR DOCUMENTOS DE APOYO */}
                       <div><label style={{...labelStyle, color: theme.primary}}>📄 Adjuntar Nuevo Documento (PDF)</label><input type="file" accept="application/pdf" onChange={(e) => setArchivoPdf(e.target.files[0] || null)} style={{ ...inputStyle, padding: '4px', cursor: 'pointer' }} /></div>
-                      <div><label style={labelStyle}>Nombre del Documento</label><input type="text" placeholder="Ej: Proforma final firmada" value={archivoDesc} onChange={(e) => setArchivoDesc(e.target.value)} style={inputStyle} /></div>
+                      <div><label style={labelStyle}>Nombre del Documento</label><input type="text" placeholder="Ej: Proforma final firmada o Evidencia" value={archivoDesc} onChange={(e) => setArchivoDesc(e.target.value)} style={inputStyle} /></div>
                       {archivoPdf && (
                         <div style={{ width: '100%', border: `1px solid ${theme.border}`, borderRadius: '6px', overflow: 'hidden', backgroundColor: '#E2E8F0', marginTop: '8px' }}><div style={{ padding: '6px 12px', backgroundColor: '#F1F5F9', borderBottom: `1px solid ${theme.border}`, fontSize: '11px', fontWeight: 'bold', color: theme.success }}>Vista Previa del Archivo a Subir</div><iframe src={URL.createObjectURL(archivoPdf)} style={{ width: '100%', height: '200px', border: 'none', display: 'block' }} title="Vista Previa" /></div>
                       )}
@@ -459,8 +485,9 @@ function Cotizaciones() {
                         ))}
                       </div>
                     )}
+                    {/* AMBOS ROLES PUEDEN COMENTAR */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      <textarea value={comentarioTexto} onChange={(e) => setComentarioTexto(e.target.value)} rows="3" placeholder="Redacta una nueva nota aquí..." style={{ ...inputStyle, resize: 'none' }} />
+                      <textarea value={comentarioTexto} onChange={(e) => setComentarioTexto(e.target.value)} rows="3" placeholder="Redacta una nueva nota o pregunta aquí..." style={{ ...inputStyle, resize: 'none' }} />
                       <button type="button" onClick={agregarComentarioALista} style={{ padding: '10px 16px', backgroundColor: theme.bgApp, color: theme.primary, border: `1px solid ${theme.border}`, borderRadius: '6px', cursor: 'pointer', fontWeight: '700', fontSize: '13px', alignSelf: 'flex-start' }}>+ Encolar Comentario</button>
                     </div>
                     {listaComentariosNuevos.length > 0 && (
@@ -470,8 +497,12 @@ function Cotizaciones() {
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '16px', padding: '24px 0 0 0', borderTop: `1px solid ${theme.border}`, marginTop: '10px' }}>
-                  <button type="button" onClick={() => setMostrarModal(false)} style={{ padding: '12px 24px', backgroundColor: theme.bgCard, color: theme.textMain, border: `1px solid ${theme.border}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '14px' }}>Descartar Cambios</button>
-                  <button type="submit" disabled={guardando || subiendoPdf} style={{ padding: '12px 24px', backgroundColor: theme.primary, color: 'white', border: 'none', borderRadius: '8px', cursor: (guardando || subiendoPdf) ? 'wait' : 'pointer', fontWeight: '600', fontSize: '15px', boxShadow: '0 4px 6px rgba(37,99,235,0.2)' }}>{subiendoPdf ? '⏳ Subiendo Archivo...' : (guardando ? 'Sincronizando con base de datos...' : (modoEdicion ? 'Actualizar Cotización' : 'Guardar Nueva Cotización'))}</button>
+                  <button type="button" onClick={() => setMostrarModal(false)} style={{ padding: '12px 24px', backgroundColor: theme.bgCard, color: theme.textMain, border: `1px solid ${theme.border}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '14px' }}>
+                    {esVisor ? 'Cerrar sin guardar' : 'Descartar Cambios'}
+                  </button>
+                  <button type="submit" disabled={guardando || subiendoPdf} style={{ padding: '12px 24px', backgroundColor: theme.primary, color: 'white', border: 'none', borderRadius: '8px', cursor: (guardando || subiendoPdf) ? 'wait' : 'pointer', fontWeight: '600', fontSize: '15px', boxShadow: '0 4px 6px rgba(37,99,235,0.2)' }}>
+                    {subiendoPdf ? '⏳ Subiendo Archivo...' : (guardando ? 'Sincronizando con base de datos...' : (esVisor ? 'Actualizar Comentarios / Docs' : (modoEdicion ? 'Actualizar Cotización' : 'Guardar Nueva Cotización')))}
+                  </button>
                 </div>
               </form>
             </div>
