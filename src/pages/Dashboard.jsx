@@ -92,6 +92,43 @@ function Dashboard() {
 
   const cantidadSinFecha = rawServicios.filter(s => !s.fechasolicitud).length;
 
+  // LÓGICA MEJORADA: Ordenar filtro de lugares en el Dashboard
+  const lugaresConConteo = useMemo(() => {
+    const conteo = {};
+    
+    rawServicios.forEach(srv => {
+      // Aplicamos todos los filtros EXCEPTO el de lugar
+      let pasaFiltro = true;
+      if (busqueda) {
+        const term = busqueda.toLowerCase();
+        if (!srv.servicio?.toLowerCase().includes(term) && !srv.idservicio?.toString().includes(term)) pasaFiltro = false;
+      }
+      if (filtroEstado.length > 0 && !filtroEstado.includes(srv.estado)) pasaFiltro = false;
+      if (filtroPrioridad.length > 0 && !filtroPrioridad.includes(srv.prioridad)) pasaFiltro = false;
+      
+      const tieneFecha = !!srv.fechasolicitud;
+      if (mostrarSinFecha && tieneFecha) pasaFiltro = false;
+      if (fechaInicio || fechaFin) {
+        if (!tieneFecha) pasaFiltro = false; 
+        else {
+          const fechaSrv = new Date(srv.fechasolicitud);
+          if (fechaInicio && fechaSrv < new Date(fechaInicio)) pasaFiltro = false;
+          if (fechaFin && fechaSrv > new Date(fechaFin)) pasaFiltro = false;
+        }
+      }
+
+      if (pasaFiltro && srv.idlugar) {
+         conteo[srv.idlugar] = (conteo[srv.idlugar] || 0) + 1;
+      }
+    });
+
+    return lugares
+      .map(l => ({ ...l, cantidad: conteo[l.idlugar] || 0 }))
+      .filter(l => l.cantidad > 0)
+      .sort((a, b) => b.cantidad - a.cantidad); // Orden Descendente
+      
+  }, [rawServicios, lugares, busqueda, filtroEstado, filtroPrioridad, fechaInicio, fechaFin, mostrarSinFecha]);
+
   // ================= PROCESAMIENTO PARA LOS GRÁFICOS =================
   useEffect(() => {
     const conteo = {}
@@ -136,6 +173,11 @@ function Dashboard() {
   const toggleFiltro = (estadoActual, setEstado, valor) => {
     if (estadoActual.includes(valor)) setEstado(estadoActual.filter(item => item !== valor));
     else setEstado([...estadoActual, valor]);
+  };
+
+  const handleSelectAllLugares = () => {
+    if (filtroLugar.length === lugaresConConteo.length) setFiltroLugar([])
+    else setFiltroLugar(lugaresConConteo.map(l => l.idlugar.toString()))
   };
 
   const cardStyle = { backgroundColor: theme.bgCard, border: `1px solid ${theme.border}`, borderRadius: '12px', padding: '24px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.05)' }
@@ -225,16 +267,22 @@ function Dashboard() {
             )}
           </div>
 
-          {/* Filtro Lugar */}
+          {/* Filtro Lugar (Actualizado) */}
           <div style={{ position: 'relative', zIndex: mostrarMenuLugar ? 50 : 1 }}>
             <button onClick={() => setMostrarMenuLugar(!mostrarMenuLugar)} style={{ padding: '10px 16px', backgroundColor: filtroLugar.length > 0 ? '#EFF6FF' : 'white', border: `1px solid ${filtroLugar.length > 0 ? '#BFDBFE' : theme.border}`, borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: filtroLugar.length > 0 ? theme.primary : theme.textMain }}>
               Sede {filtroLugar.length > 0 && `(${filtroLugar.length})`} ▼
             </button>
             {mostrarMenuLugar && (
-              <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', backgroundColor: 'white', border: `1px solid ${theme.border}`, borderRadius: '8px', padding: '8px', width: '200px', maxHeight: '300px', overflowY: 'auto', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
-                {lugares.map(lug => (
-                  <label key={lug.idlugar} style={{ display: 'flex', alignItems: 'center', padding: '6px 8px', fontSize: '12px', cursor: 'pointer', borderRadius: '4px' }}>
-                    <input type="checkbox" checked={filtroLugar.includes(lug.idlugar.toString())} onChange={() => toggleFiltro(filtroLugar, setFiltroLugar, lug.idlugar.toString())} style={{ marginRight: '8px' }} /> {lug.lugarejecucion}
+              <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', backgroundColor: 'white', border: `1px solid ${theme.border}`, borderRadius: '8px', padding: '12px', width: '250px', maxHeight: '300px', overflowY: 'auto', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
+                <label style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 'bold', paddingBottom: '6px', borderBottom: `1px solid ${theme.border}`, marginBottom: '6px' }}>
+                   <input type="checkbox" checked={filtroLugar.length === lugaresConConteo.length && lugaresConConteo.length > 0} onChange={handleSelectAllLugares} /> Seleccionar Todo
+                </label>
+                {lugaresConConteo.length === 0 && <div style={{ fontSize: '12px', color: theme.textMuted }}>No hay lugares.</div>}
+                {lugaresConConteo.map(lug => (
+                  <label key={lug.idlugar} style={{ display: 'flex', alignItems: 'center', padding: '6px 8px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}>
+                    <input type="checkbox" checked={filtroLugar.includes(lug.idlugar.toString())} onChange={() => toggleFiltro(filtroLugar, setFiltroLugar, lug.idlugar.toString())} style={{ marginRight: '8px' }} /> 
+                    <span style={{ flex: 1 }}>{lug.lugarejecucion}</span>
+                    <span style={{ color: theme.textMuted, fontSize: '11px', fontWeight: 'bold' }}>({lug.cantidad})</span>
                   </label>
                 ))}
               </div>

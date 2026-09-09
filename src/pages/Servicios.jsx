@@ -19,7 +19,7 @@ function Servicios() {
   const [cargando, setCargando] = useState(true)
   
   const [idUsuarioActual, setIdUsuarioActual] = useState('')
-  const [rolUsuarioActual, setRolUsuarioActual] = useState('ADMIN') // NUEVO: ROL - Guardamos el rol del usuario
+  const [rolUsuarioActual, setRolUsuarioActual] = useState('ADMIN') 
 
   const [busqueda, setBusqueda] = useState('')
   const [filtroEstado, setFiltroEstado] = useState([])
@@ -121,14 +121,12 @@ function Servicios() {
     setCatImpuestos(await fetchSafe(supabase.from('impuestos').select('*')))
     setCatUnidades(await fetchSafe(supabase.from('unidadmedida').select('*').eq('activo', true)))
     
-    // NUEVO: Leemos quién es el que acaba de iniciar sesión
     const usuarioGuardado = localStorage.getItem('usuarioApp');
     if (usuarioGuardado) {
       const userObj = JSON.parse(usuarioGuardado);
       setIdUsuarioActual(userObj.idusuario);
       setRolUsuarioActual(userObj.rol || 'ADMIN');
     } else {
-      // Si alguien intenta entrar sin loguearse, lo pateamos al Login
       navigate('/');
     }
     
@@ -208,10 +206,24 @@ function Servicios() {
     return true;
   }
 
+  // LÓGICA MEJORADA: Ordenamos las sedes por cantidad de servicios de manera descendente
   const estadosDisponibles = [...new Set(listaServicios.filter(s => pasaFiltros(s, 'estado')).map(s => s.estado))].filter(Boolean)
   const prioridadesDisponibles = [...new Set(listaServicios.filter(s => pasaFiltros(s, 'prioridad')).map(s => s.prioridad))].filter(Boolean)
-  const lugaresIdsDisponibles = [...new Set(listaServicios.filter(s => pasaFiltros(s, 'lugar')).map(s => s.idlugar?.toString()))].filter(Boolean)
-  const lugaresDisponibles = lugares.filter(l => lugaresIdsDisponibles.includes(l.idlugar.toString()))
+  
+  // 1. Obtenemos servicios que pasan todos los filtros EXCEPTO el de lugar
+  const serviciosParaLugar = listaServicios.filter(s => pasaFiltros(s, 'lugar'));
+  // 2. Contamos cuántos servicios hay por cada sede
+  const conteoLugares = {};
+  serviciosParaLugar.forEach(s => {
+    if (s.idlugar) conteoLugares[s.idlugar] = (conteoLugares[s.idlugar] || 0) + 1;
+  });
+  // 3. Cruzamos con el catálogo de lugares, agregamos la cantidad, filtramos vacíos y ORDENAMOS DESCENDENTE
+  const lugaresDisponibles = lugares
+    .map(l => ({ ...l, cantidad: conteoLugares[l.idlugar] || 0 }))
+    .filter(l => l.cantidad > 0)
+    .sort((a, b) => b.cantidad - a.cantidad); // Ordena mayor a menor
+
+  const lugaresIdsDisponibles = lugaresDisponibles.map(l => l.idlugar.toString());
 
   let datosProcesados = listaServicios.filter(s => pasaFiltros(s, null)).map(srv => ({ ...srv, montoAprobado: getMontoAprobado(srv) }))
 
@@ -486,7 +498,14 @@ function Servicios() {
                   <div onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: '100%', left: 0, backgroundColor: 'white', border: `1px solid ${theme.border}`, borderRadius: '8px', padding: '12px', zIndex: 50, width: '250px', maxHeight: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
                     <label style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 'bold', paddingBottom: '6px', borderBottom: `1px solid ${theme.border}` }}><input type="checkbox" checked={filtroLugar.length === lugaresIdsDisponibles.length && lugaresIdsDisponibles.length > 0} onChange={() => handleSelectAll(lugaresIdsDisponibles, filtroLugar, setFiltroLugar)} /> Seleccionar Todo</label>
                     {lugaresDisponibles.length === 0 && <div style={{ fontSize: '12px', color: theme.textMuted }}>No hay lugares con los filtros actuales.</div>}
-                    {lugaresDisponibles.map(l => (<label key={l.idlugar} style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}><input type="checkbox" checked={filtroLugar.includes(l.idlugar.toString())} onChange={() => handleCheckboxChange(l.idlugar.toString(), filtroLugar, setFiltroLugar)} /> {l.lugarejecucion}</label>))}
+                    {/* IMPRESIÓN DEL FILTRO ORDENADO CON CANTIDAD */}
+                    {lugaresDisponibles.map(l => (
+                      <label key={l.idlugar} style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                        <input type="checkbox" checked={filtroLugar.includes(l.idlugar.toString())} onChange={() => handleCheckboxChange(l.idlugar.toString(), filtroLugar, setFiltroLugar)} /> 
+                        <span style={{ flex: 1 }}>{l.lugarejecucion}</span>
+                        <span style={{ color: theme.textMuted, fontSize: '11px', fontWeight: 'bold' }}>({l.cantidad})</span>
+                      </label>
+                    ))}
                   </div>
                 )}
               </div>
@@ -503,7 +522,6 @@ function Servicios() {
               style={{ padding: '10px 20px', backgroundColor: serviciosSeleccionados.length > 0 ? theme.success : '#E2E8F0', color: 'white', border: 'none', borderRadius: '8px', cursor: serviciosSeleccionados.length > 0 ? 'pointer' : 'not-allowed', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
               📥 Exportar Data ({serviciosSeleccionados.length})
             </button>
-            {/* NUEVO: ROL - Ocultamos el botón "Nuevo Servicio" si el rol es VISOR */}
             {rolUsuarioActual !== 'VISOR' && (
               <button onClick={abrirModalNuevo} style={{ padding: '10px 20px', backgroundColor: theme.primary, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>+ Nuevo Servicio</button>
             )}
@@ -628,7 +646,6 @@ function Servicios() {
                               <button onClick={(e) => toggleAcciones(srv.idservicio, e)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: theme.textMuted }}>⋮</button>
                               {menuAccionesFila === srv.idservicio && (
                                 <div onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', right: '30px', top: '50%', transform: 'translateY(-50%)', backgroundColor: 'white', border: `1px solid ${theme.border}`, borderRadius: '8px', zIndex: 50, display: 'flex', gap: '4px', padding: '6px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
-                                  {/* NUEVO: ROL - Ocultamos el botón "Editar" si es VISOR */}
                                   {rolUsuarioActual !== 'VISOR' && (
                                     <button onClick={() => {abrirModalEditar(srv); setMenuAccionesFila(null)}} style={{ padding: '6px 10px', border: `1px solid ${theme.border}`, borderRadius: '6px', background: 'white', cursor: 'pointer', fontSize: '12px' }}>✏️ Editar</button>
                                   )}
@@ -759,7 +776,6 @@ function Servicios() {
           </div>
         )}
 
-        {/* NUEVO: ROL - Le pasamos el rolUsuarioActual al Modal */}
         <ServicioModal 
           visible={mostrarModalPrincipal} 
           modoEdicion={modoEdicion} 
@@ -775,7 +791,6 @@ function Servicios() {
           onSuccess={() => { setMostrarModalPrincipal(false); cargarDatosIniciales(); }}
         />
 
-        {/* NUEVO: ROL - Le pasamos el rolUsuarioActual al Evaluador */}
         {mostrarModalHomologacion && servicioHomologacion && (
           <CentroEvaluacion 
             servicio={servicioHomologacion} 

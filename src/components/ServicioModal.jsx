@@ -8,9 +8,8 @@ function ServicioModal({
 }) {
   
   const [guardando, setGuardando] = useState(false)
-  const esVisor = rolUsuario === 'VISOR'; // NUEVO: Evaluador de permisos
+  const esVisor = rolUsuario === 'VISOR'; 
 
-  // OPTIMIZACIÓN: Un solo estado (formData) para todo el formulario en lugar de 15+ variables
   const [formData, setFormData] = useState({
     servicio: '', detalle: '', idlugar: '', estado: 'PENDIENTE', prioridad: 'Media',
     num_requerimiento: '', fecharequerimiento: '', fechasolicitud: '', orden_compra: '',
@@ -18,13 +17,11 @@ function ServicioModal({
     idsistema: '', idsubsistema: '', responsable: ''
   });
 
-  // Manejador dinámico para CUALQUIER input del formulario
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // Cargar datos al abrir el modal (para crear o editar)
   useEffect(() => {
     if (visible) {
       if (modoEdicion && servicioAEditar) {
@@ -48,7 +45,6 @@ function ServicioModal({
           responsable: servicioAEditar.responsable || ''
         });
       } else {
-        // Limpiar para un Nuevo Servicio
         setFormData({
           servicio: '', detalle: '', idlugar: '', estado: 'PENDIENTE', prioridad: 'Media',
           num_requerimiento: '', fecharequerimiento: '', fechasolicitud: new Date().toISOString().split('T')[0], 
@@ -61,15 +57,40 @@ function ServicioModal({
 
   if (!visible) return null
 
+  // Función inteligente para transformar lo que escribes a IDs de base de datos
+  const resolverIdBaseDatos = (valorEscrito, lista, columnaTexto, columnaId) => {
+    if (!valorEscrito) return null;
+    const existeComoId = lista.find(item => item[columnaId].toString() === valorEscrito.toString());
+    if (existeComoId) return existeComoId[columnaId];
+    const existeComoTexto = lista.find(item => item[columnaTexto]?.toString().toLowerCase() === valorEscrito.toString().toLowerCase());
+    return existeComoTexto ? existeComoTexto[columnaId] : null;
+  };
+
   const handleGuardar = async (e) => {
     e.preventDefault()
     if (formData.progreso < 0 || formData.progreso > 100) { alert("El progreso debe ser un número entre 0 y 100"); return }
     setGuardando(true)
+
+    // Validamos que lo que el usuario escribió realmente exista en la base de datos
+    const valInfra = resolverIdBaseDatos(formData.idtipo, tiposInfraestructura, 'tipoinfraestructura', 'idtipo');
+    if (formData.idtipo && !valInfra) { alert(`❌ La Infraestructura ingresada no es válida. Selecciona una de la lista.`); setGuardando(false); return; }
+
+    const valServ = resolverIdBaseDatos(formData.idtiposervicio, tiposServicio, 'tiposervicio', 'idtiposervicio');
+    if (formData.idtiposervicio && !valServ) { alert(`❌ El Tipo de Servicio ingresado no es válido. Selecciona uno de la lista.`); setGuardando(false); return; }
+
+    const valSis = resolverIdBaseDatos(formData.idsistema, sistemas, 'sistema', 'idsistema');
+    if (formData.idsistema && !valSis) { alert(`❌ El Sistema ingresado no es válido. Selecciona uno de la lista.`); setGuardando(false); return; }
+
+    const valSub = resolverIdBaseDatos(formData.idsubsistema, subsistemas, 'sub_sistema', 'idsubsistema');
+    if (formData.idsubsistema && !valSub) { alert(`❌ El Subsistema ingresado no es válido. Selecciona uno de la lista.`); setGuardando(false); return; }
     
-    // Formatear los datos antes de enviar a Supabase (convertir vacíos a null)
+    // NUEVO: Validación para el Lugar de Ejecución
+    const valLugar = resolverIdBaseDatos(formData.idlugar, lugares, 'lugarejecucion', 'idlugar');
+    if (formData.idlugar && !valLugar) { alert(`❌ El Lugar de Ejecución ingresado no es válido. Selecciona uno de la lista o créalo con el botón '+'.`); setGuardando(false); return; }
+
     const datosGuardar = { 
       ...formData,
-      idlugar: formData.idlugar || null, 
+      idlugar: valLugar, // Asignamos el ID resuelto
       num_requerimiento: formData.num_requerimiento || null, 
       fecharequerimiento: formData.fecharequerimiento || null, 
       fechasolicitud: formData.fechasolicitud || null,
@@ -77,10 +98,10 @@ function ServicioModal({
       solped: formData.solped || null, 
       fechasolped: formData.fechasolped || null,
       progreso: parseInt(formData.progreso) || 0, 
-      idtipo: formData.idtipo || null, 
-      idtiposervicio: formData.idtiposervicio || null,
-      idsistema: formData.idsistema || null, 
-      idsubsistema: formData.idsubsistema || null, 
+      idtipo: valInfra, 
+      idtiposervicio: valServ,
+      idsistema: valSis, 
+      idsubsistema: valSub, 
       responsable: formData.responsable || null
     };
 
@@ -102,6 +123,13 @@ function ServicioModal({
   const theme = { bgApp: '#F8FAFC', bgCard: '#FFFFFF', textMain: '#1E293B', textMuted: '#64748B', border: '#E2E8F0', primary: '#2563EB', inputBg: '#FFFFFF' }
   const inputStyle = { width: '100%', padding: '8px 12px', borderRadius: '6px', border: `1px solid ${theme.border}`, backgroundColor: esVisor ? '#F1F5F9' : theme.inputBg, color: esVisor ? theme.textMuted : theme.textMain, fontSize: '13px', outline: 'none', boxSizing: 'border-box' }
   const labelStyle = { display: 'block', fontSize: '12px', fontWeight: '600', marginBottom: '4px', color: theme.textMain }
+
+  // Funciones para que el campo visual muestre el texto en lugar del número de ID cuando editas
+  const getNombreInfraestructura = (val) => { const m = tiposInfraestructura.find(t => t.idtipo.toString() === val?.toString()); return m ? m.tipoinfraestructura : val || ''; };
+  const getNombreTipoServicio = (val) => { const m = tiposServicio.find(t => t.idtiposervicio.toString() === val?.toString()); return m ? m.tiposervicio : val || ''; };
+  const getNombreSistema = (val) => { const m = sistemas.find(s => s.idsistema.toString() === val?.toString()); return m ? m.sistema : val || ''; };
+  const getNombreSubsistema = (val) => { const m = subsistemas.find(s => s.idsubsistema.toString() === val?.toString()); return m ? m.sub_sistema : val || ''; };
+  const getNombreLugar = (val) => { const m = lugares.find(l => l.idlugar.toString() === val?.toString()); return m ? m.lugarejecucion : val || ''; };
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(15, 23, 42, 0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
@@ -155,46 +183,47 @@ function ServicioModal({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                 <div>
                   <label style={labelStyle}>Infraestructura</label>
-                  <select name="idtipo" disabled={esVisor} value={formData.idtipo} onChange={handleChange} style={inputStyle}>
-                    <option value="">-- Seleccionar --</option>
-                    {tiposInfraestructura.map(t => <option key={t.idtipo} value={t.idtipo}>{t.tipoinfraestructura}</option>)}
-                  </select>
+                  <input list="lista-infraestructura" name="idtipo" placeholder="Escribe para buscar..." disabled={esVisor} value={getNombreInfraestructura(formData.idtipo)} onChange={handleChange} style={inputStyle} />
+                  <datalist id="lista-infraestructura">{tiposInfraestructura.map(t => <option key={t.idtipo} value={t.tipoinfraestructura} />)}</datalist>
                 </div>
                 <div>
                   <label style={labelStyle}>Tipo de Servicio</label>
-                  <select name="idtiposervicio" disabled={esVisor} value={formData.idtiposervicio} onChange={handleChange} style={inputStyle}>
-                    <option value="">-- Seleccionar --</option>
-                    {tiposServicio.map(t => <option key={t.idtiposervicio} value={t.idtiposervicio}>{t.tiposervicio}</option>)}
-                  </select>
+                  <input list="lista-tiposervicio" name="idtiposervicio" placeholder="Escribe para buscar..." disabled={esVisor} value={getNombreTipoServicio(formData.idtiposervicio)} onChange={handleChange} style={inputStyle} />
+                  <datalist id="lista-tiposervicio">{tiposServicio.map(t => <option key={t.idtiposervicio} value={t.tiposervicio} />)}</datalist>
                 </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                 <div>
                   <label style={labelStyle}>Sistema</label>
-                  <select name="idsistema" disabled={esVisor} value={formData.idsistema} onChange={handleChange} style={inputStyle}>
-                    <option value="">-- Seleccionar --</option>
-                    {sistemas.map(s => <option key={s.idsistema} value={s.idsistema}>{s.sistema}</option>)}
-                  </select>
+                  <input list="lista-sistemas" name="idsistema" placeholder="Escribe para buscar..." disabled={esVisor} value={getNombreSistema(formData.idsistema)} onChange={handleChange} style={inputStyle} />
+                  <datalist id="lista-sistemas">{sistemas.map(s => <option key={s.idsistema} value={s.sistema} />)}</datalist>
                 </div>
                 <div>
                   <label style={labelStyle}>Subsistema</label>
-                  <select name="idsubsistema" disabled={esVisor} value={formData.idsubsistema} onChange={handleChange} style={inputStyle}>
-                    <option value="">-- Seleccionar --</option>
-                    {subsistemas.map(s => <option key={s.idsubsistema} value={s.idsubsistema}>{s.sub_sistema}</option>)}
-                  </select>
+                  <input list="lista-subsistemas" name="idsubsistema" placeholder="Escribe para buscar..." disabled={esVisor} value={getNombreSubsistema(formData.idsubsistema)} onChange={handleChange} style={inputStyle} />
+                  <datalist id="lista-subsistemas">{subsistemas.map(s => <option key={s.idsubsistema} value={s.sub_sistema} />)}</datalist>
                 </div>
               </div>
 
+              {/* NUEVO: Lugar de Ejecución con Lista Inteligente */}
               <div style={{ marginBottom: '12px' }}>
                 <label style={labelStyle}>Lugar de Ejecución</label>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <select name="idlugar" disabled={esVisor} value={formData.idlugar} onChange={handleChange} style={{ ...inputStyle, flex: 1 }}>
-                    <option value="">-- Seleccionar --</option>
-                    {lugares.map(l => <option key={l.idlugar} value={l.idlugar}>{l.lugarejecucion}</option>)}
-                  </select>
+                  <input 
+                    list="lista-lugares" 
+                    name="idlugar" 
+                    placeholder="Escribe para buscar..." 
+                    disabled={esVisor} 
+                    value={getNombreLugar(formData.idlugar)} 
+                    onChange={handleChange} 
+                    style={{ ...inputStyle, flex: 1 }} 
+                  />
+                  <datalist id="lista-lugares">
+                    {lugares.map(l => <option key={l.idlugar} value={l.lugarejecucion} />)}
+                  </datalist>
                   {!esVisor && (
-                    <button type="button" onClick={onAbrirNuevoLugar} style={{ padding: '0 12px', backgroundColor: '#EFF6FF', color: theme.primary, border: `1px solid #BFDBFE`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '700' }}>+</button>
+                    <button type="button" onClick={onAbrirNuevoLugar} style={{ padding: '0 12px', backgroundColor: '#EFF6FF', color: theme.primary, border: `1px solid #BFDBFE`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '700' }} title="Crear nueva sede">+</button>
                   )}
                 </div>
               </div>

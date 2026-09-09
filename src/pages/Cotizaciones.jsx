@@ -27,9 +27,11 @@ function Cotizaciones() {
   
   const [idUsuarioActual, setIdUsuarioActual] = useState('')
   const [nombreUsuarioActual, setNombreUsuarioActual] = useState('Cargando...')
-  const [rolUsuarioActual, setRolUsuarioActual] = useState('ADMIN') // NUEVO: Estado del rol
+  const [rolUsuarioActual, setRolUsuarioActual] = useState('ADMIN') 
+  
   const [defUnidadId, setDefUnidadId] = useState('')
   const [defImpuestoId, setDefImpuestoId] = useState('')
+  const [defMonedaId, setDefMonedaId] = useState('') 
 
   const [mostrarModal, setMostrarModal] = useState(false)
   const [guardando, setGuardando] = useState(false)
@@ -42,7 +44,6 @@ function Cotizaciones() {
   const [idMoneda, setIdMoneda] = useState('')
   const [estadoCotizacion, setEstadoCotizacion] = useState('Solicitada')
   
-  // NUEVAS FECHAS AÑADIDAS
   const [fechaEnvioCotizacion, setFechaEnvioCotizacion] = useState('')
   const [fechaVisitaTecnica, setFechaVisitaTecnica] = useState('')
   const [fechaRecepcion, setFechaRecepcion] = useState('')
@@ -65,7 +66,7 @@ function Cotizaciones() {
   const [plazoDias, setPlazoDias] = useState('')
   const [entregables, setEntregables] = useState('')
 
-  const esVisor = rolUsuarioActual === 'VISOR'; // NUEVO: Variable de control
+  const esVisor = rolUsuarioActual === 'VISOR'; 
 
   const cargarDatos = async () => {
     setCargando(true)
@@ -87,11 +88,10 @@ function Cotizaciones() {
     if (resUni.data) setCatUnidades(resUni.data)
     if (resImp.data) setCatImpuestos(resImp.data)
     
-    let dUni = '', dImp = ''
-    if (resUni.data) { const u = resUni.data.find(x => x.unidadmedida === 'UND - Unidad'); if (u) { dUni = u.idunidad; setDefUnidadId(dUni) } }
-    if (resImp.data) { const i = resImp.data.find(x => x.impuesto === 'Incluido IGV'); if (i) { dImp = i.idimpuestos; setDefImpuestoId(dImp) } }
+    if (resUni.data) { const u = resUni.data.find(x => x.unidadmedida === 'UND - Unidad'); if (u) { setDefUnidadId(u.idunidad) } }
+    if (resImp.data) { const i = resImp.data.find(x => x.impuesto === '+ IGV'); if (i) { setDefImpuestoId(i.idimpuestos) } }
+    if (resMon.data) { const m = resMon.data.find(x => x.moneda.toLowerCase().includes('sol') || x.moneda.includes('PEN')); if (m) setDefMonedaId(m.idmoneda); }
 
-    // NUEVO: Leemos al usuario desde la credencial del navegador
     const usuarioGuardado = localStorage.getItem('usuarioApp');
     if (usuarioGuardado) {
       const userObj = JSON.parse(usuarioGuardado);
@@ -150,7 +150,8 @@ function Cotizaciones() {
   const RenderSortIcon = ({ clave }) => configOrden.clave !== clave ? <span style={{ color: '#CBD5E1', marginLeft: '5px', fontSize:'10px' }}>▼</span> : <span style={{ marginLeft: '5px', color: '#2563EB', fontSize:'10px' }}>{configOrden.direccion === 'asc' ? '▲' : '▼'}</span>
 
   const abrirModalNuevo = () => {
-    setModoEdicion(false); setIdCotizacionActual(null); setRucProveedor(''); setIdFormaPago(''); setIdMoneda(''); setEstadoCotizacion('Solicitada')
+    setModoEdicion(false); setIdCotizacionActual(null); setRucProveedor(''); setIdFormaPago(''); setEstadoCotizacion('Solicitada')
+    setIdMoneda(defMonedaId); 
     setFechaEnvioCotizacion(getFechaHoy()); setFechaVisitaTecnica(''); setFechaRecepcion(''); setFechaAceptacion(''); setFechaInicio(''); setFechaFin('')
     setGastosGenerales(0); setUtilidades(0); setPlazoDias(''); setEntregables('');
     setDetalles([{ item: '', cantidad: 1, idUnidad: defUnidadId, precioUnitario: 0, idImpuestos: defImpuestoId }])
@@ -182,7 +183,8 @@ function Cotizaciones() {
   }
 
   const handleEliminarArchivo = async (idArchivo, urlArchivo) => {
-    if (!window.confirm('¿Estás seguro de eliminar este documento?')) return;
+    const confirmacion = window.confirm('⚠️ ATENCIÓN:\n\n¿Estás completamente seguro de que deseas ELIMINAR este documento?\nEsta acción NO se puede deshacer y el archivo se perderá permanentemente.');
+    if (!confirmacion) return;
     try {
       const { error: dbError } = await supabase.from('archivocot').delete().eq('idarchivo', idArchivo);
       if (dbError) throw dbError;
@@ -200,7 +202,7 @@ function Cotizaciones() {
     let costoDirecto = 0, subtotalParcial = 0, igvBase = 0, totalFinalBase = 0
     detalles.forEach(fila => {
       const baseFila = fila.cantidad * fila.precioUnitario
-      const tipoImpuesto = catImpuestos.find(i => i.idimpuestos == fila.idImpuestos)?.impuesto
+      const tipoImpuesto = catImpuestos.find(i => i.idimpuestos.toString() === fila.idImpuestos?.toString() || i.impuesto === fila.idImpuestos)?.impuesto
       if (tipoImpuesto === 'Incluido IGV') { costoDirecto += (baseFila / 1.18); igvBase += baseFila - (baseFila / 1.18); totalFinalBase += baseFila } 
       else if (tipoImpuesto === '+ IGV') { costoDirecto += baseFila; igvBase += (baseFila * 0.18); totalFinalBase += (baseFila * 1.18) } 
       else { costoDirecto += baseFila; totalFinalBase += baseFila }
@@ -213,20 +215,36 @@ function Cotizaciones() {
   const agregarComentarioALista = () => { if (comentarioTexto.trim() !== '') { setListaComentariosNuevos([...listaComentariosNuevos, comentarioTexto]); setComentarioTexto('') } }
   const eliminarComentarioDeLista = (index) => setListaComentariosNuevos(listaComentariosNuevos.filter((_, i) => i !== index))
 
+  const getNombreProveedor = (val) => { const x = catProveedores.find(p => p.ruc === val?.toString()); return x ? x.razonsocial : val || ''; }
+  const getNombreMoneda = (val) => { const x = catMonedas.find(m => m.idmoneda.toString() === val?.toString()); return x ? x.moneda : val || ''; }
+  const getNombreFormaPago = (val) => { const x = catFormasPago.find(f => f.idformapago.toString() === val?.toString()); return x ? x.formapago : val || ''; }
+  const getNombreUnidad = (val) => { const x = catUnidades.find(u => u.idunidad.toString() === val?.toString()); return x ? x.unidadmedida : val || ''; }
+  const getNombreImpuesto = (val) => { const x = catImpuestos.find(i => i.idimpuestos.toString() === val?.toString()); return x ? x.impuesto : val || ''; }
+
   const handleGuardarTodo = async (e) => {
     e.preventDefault()
     
-    // VISOR BLOCK: Solo validamos estrictamente comercial si NO es visor
+    const valProv = catProveedores.find(p => p.ruc === rucProveedor || p.razonsocial === rucProveedor)?.ruc;
+    const valMoneda = idMoneda ? catMonedas.find(m => m.idmoneda.toString() === idMoneda.toString() || m.moneda === idMoneda)?.idmoneda : null;
+    const valFPago = idFormaPago ? catFormasPago.find(f => f.idformapago.toString() === idFormaPago.toString() || f.formapago === idFormaPago)?.idformapago : null;
+
     if (!esVisor) {
-      if (!rucProveedor) { alert("Debe seleccionar al proveedor."); return }
+      if (!valProv) { alert("Debe seleccionar un Proveedor válido de la lista."); return }
       const detallesValidos = detalles.filter(d => d.item && d.item.trim() !== '');
       if (estadoCotizacion !== 'Solicitada') {
-        if (!idFormaPago || !idMoneda) { alert("Para registrar una cotización como recibida o procesada, complete Forma de Pago y Moneda."); return }
+        if (!valFPago || !valMoneda) { alert("Para registrar una cotización como recibida o procesada, seleccione Forma de Pago y Moneda de la lista."); return }
         if (detallesValidos.length === 0) { alert("Debe tener al menos un ítem descrito para guardar los precios."); return }
+        
+        // REVISIÓN DE SEGURIDAD PARA FILAS
         for (let i = 0; i < detallesValidos.length; i++) {
           if (detallesValidos[i].cantidad <= 0 || detallesValidos[i].precioUnitario <= 0) { 
             alert(`Fila con ítem "${detallesValidos[i].item}" tiene cantidad o precio inválido.`); return 
           }
+          const validU = catUnidades.find(x => x.idunidad.toString() === detallesValidos[i].idUnidad?.toString() || x.unidadmedida === detallesValidos[i].idUnidad);
+          if (!validU) { alert(`Fila "${detallesValidos[i].item}": Unidad de medida inválida. Selecciona de la lista.`); return; }
+
+          const validI = catImpuestos.find(x => x.idimpuestos.toString() === detallesValidos[i].idImpuestos?.toString() || x.impuesto === detallesValidos[i].idImpuestos);
+          if (!validI) { alert(`Fila "${detallesValidos[i].item}": Afectación IGV inválida. Selecciona de la lista.`); return; }
         }
       }
     }
@@ -235,10 +253,9 @@ function Cotizaciones() {
     try {
       let idCotizacionFinal = idCotizacionActual
 
-      // Si NO es visor, actualizamos toda la data comercial
       if (!esVisor) {
         const payloadCabecera = {
-          ruc: rucProveedor, idformapago: idFormaPago || null, idmoneda: idMoneda || null, estado: estadoCotizacion,
+          ruc: valProv, idformapago: valFPago, idmoneda: valMoneda, estado: estadoCotizacion,
           fecha_envio_cotizacion: fechaEnvioCotizacion || null, fecha_visita_tecnica: fechaVisitaTecnica || null,
           fecharecepcion: fechaRecepcion || null, fechaaceptacion: fechaAceptacion || null, fechainicio: fechaInicio || null, fechafin: fechaFin || null,
           gastos_generales: gastosGenerales, utilidades: utilidades, plazo_dias: plazoDias, entregables: entregables
@@ -258,15 +275,18 @@ function Cotizaciones() {
 
         const detallesValidos = detalles.filter(d => d.item && d.item.trim() !== '');
         if (detallesValidos.length > 0) {
-          const detallesFormateados = detallesValidos.map(d => ({
-            idcotizacion: idCotizacionFinal, item: d.item, cantidad: d.cantidad, idunidad: d.idUnidad || null, preciounitario: d.precioUnitario, idimpuestos: d.idImpuestos || null
-          }))
+          const detallesFormateados = detallesValidos.map(d => {
+            const u = catUnidades.find(x => x.idunidad.toString() === d.idUnidad?.toString() || x.unidadmedida === d.idUnidad)?.idunidad || null;
+            const i = catImpuestos.find(x => x.idimpuestos.toString() === d.idImpuestos?.toString() || x.impuesto === d.idImpuestos)?.idimpuestos || null;
+            return {
+              idcotizacion: idCotizacionFinal, item: d.item, cantidad: d.cantidad, idunidad: u, preciounitario: d.precioUnitario, idimpuestos: i
+            };
+          })
           const { error: errDetalles } = await supabase.from('detallecotizacion').insert(detallesFormateados)
           if (errDetalles) throw errDetalles
         }
       }
 
-      // ESTO LO PUEDEN HACER AMBOS (ADMIN Y VISOR): Comentarios y Documentos
       const todosLosComentarios = [...listaComentariosNuevos]
       if (comentarioTexto.trim() !== '') todosLosComentarios.push(comentarioTexto)
       if (todosLosComentarios.length > 0) {
@@ -393,10 +413,61 @@ function Cotizaciones() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px' }}>
                   <div style={cardStyle}>
                     <h4 style={{ margin: '0 0 20px 0', color: theme.textMain, fontSize: '16px', borderBottom: `1px solid ${theme.border}`, paddingBottom: '12px' }}>1. Proveedor y Finanzas</h4>
-                    <div style={{ marginBottom: '16px' }}><label style={labelStyle}>Proveedor (Solicitado o Contratado) *</label><select disabled={esVisor} required value={rucProveedor} onChange={(e) => setRucProveedor(e.target.value)} style={inputStyle}><option value="">-- Seleccionar --</option>{catProveedores.map(p => <option key={p.ruc} value={p.ruc}>{p.ruc} - {p.razonsocial}</option>)}</select></div>
+                    
+                    <div style={{ marginBottom: '16px' }}>
+                      <label style={labelStyle}>Proveedor (Solicitado o Contratado) *</label>
+                      <input 
+                        list="lista-proveedores" 
+                        required 
+                        disabled={esVisor} 
+                        value={getNombreProveedor(rucProveedor)} 
+                        onChange={(e) => {
+                          const p = catProveedores.find(x => x.razonsocial === e.target.value);
+                          setRucProveedor(p ? p.ruc : e.target.value);
+                        }} 
+                        style={inputStyle} 
+                        placeholder="Escribe para buscar..."
+                      />
+                      <datalist id="lista-proveedores">
+                        {catProveedores.map(p => <option key={p.ruc} value={p.razonsocial} />)}
+                      </datalist>
+                    </div>
+
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                      <div><label style={labelStyle}>Condición de Pago (Si ya cotizó)</label><select disabled={esVisor} value={idFormaPago} onChange={(e) => setIdFormaPago(e.target.value)} style={inputStyle}><option value="">-- Opcional --</option>{catFormasPago.map(f => <option key={f.idformapago} value={f.idformapago}>{f.formapago}</option>)}</select></div>
-                      <div><label style={labelStyle}>Moneda de Facturación</label><select disabled={esVisor} value={idMoneda} onChange={(e) => setIdMoneda(e.target.value)} style={inputStyle}><option value="">-- Opcional --</option>{catMonedas.map(m => <option key={m.idmoneda} value={m.idmoneda}>{m.moneda}</option>)}</select></div>
+                      <div>
+                        <label style={labelStyle}>Condición de Pago (Si ya cotizó)</label>
+                        <input 
+                          list="lista-pago" 
+                          disabled={esVisor} 
+                          value={getNombreFormaPago(idFormaPago)} 
+                          onChange={(e) => {
+                            const f = catFormasPago.find(x => x.formapago === e.target.value);
+                            setIdFormaPago(f ? f.idformapago : e.target.value);
+                          }} 
+                          style={inputStyle} 
+                          placeholder="-- Opcional --"
+                        />
+                        <datalist id="lista-pago">
+                          {catFormasPago.map(f => <option key={f.idformapago} value={f.formapago} />)}
+                        </datalist>
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Moneda de Facturación</label>
+                        <input 
+                          list="lista-monedas" 
+                          disabled={esVisor} 
+                          value={getNombreMoneda(idMoneda)} 
+                          onChange={(e) => {
+                            const m = catMonedas.find(x => x.moneda === e.target.value);
+                            setIdMoneda(m ? m.idmoneda : e.target.value);
+                          }} 
+                          style={inputStyle} 
+                          placeholder="-- Opcional --"
+                        />
+                        <datalist id="lista-monedas">
+                          {catMonedas.map(m => <option key={m.idmoneda} value={m.moneda} />)}
+                        </datalist>
+                      </div>
                     </div>
                   </div>
 
@@ -431,8 +502,31 @@ function Cotizaciones() {
                     {detalles.map((fila, index) => (
                       <div key={index} style={{ display: 'grid', gridTemplateColumns: '3fr 1.5fr 1.5fr 1fr 1.5fr 1.5fr 40px', gap: '12px', marginBottom: '12px', alignItems: 'center' }}>
                         <input type="text" disabled={esVisor} placeholder="Describe el material o servicio..." value={fila.item} onChange={(e) => actualizarFila(index, 'item', e.target.value)} style={inputStyle} />
-                        <select disabled={esVisor} value={fila.idUnidad} onChange={(e) => actualizarFila(index, 'idUnidad', e.target.value)} style={inputStyle}>{catUnidades.map(u => <option key={u.idunidad} value={u.idunidad}>{u.unidadmedida}</option>)}</select>
-                        <select disabled={esVisor} value={fila.idImpuestos} onChange={(e) => actualizarFila(index, 'idImpuestos', e.target.value)} style={inputStyle}>{catImpuestos.map(i => <option key={i.idimpuestos} value={i.idimpuestos}>{i.impuesto}</option>)}</select>
+                        
+                        <input 
+                          list="lista-unidades" 
+                          disabled={esVisor} 
+                          value={getNombreUnidad(fila.idUnidad)} 
+                          onChange={(e) => {
+                            const u = catUnidades.find(x => x.unidadmedida === e.target.value);
+                            actualizarFila(index, 'idUnidad', u ? u.idunidad : e.target.value);
+                          }} 
+                          style={inputStyle} 
+                        />
+                        <datalist id="lista-unidades">{catUnidades.map(u => <option key={u.idunidad} value={u.unidadmedida} />)}</datalist>
+
+                        <input 
+                          list="lista-impuestos" 
+                          disabled={esVisor} 
+                          value={getNombreImpuesto(fila.idImpuestos)} 
+                          onChange={(e) => {
+                            const i = catImpuestos.find(x => x.impuesto === e.target.value);
+                            actualizarFila(index, 'idImpuestos', i ? i.idimpuestos : e.target.value);
+                          }} 
+                          style={inputStyle} 
+                        />
+                        <datalist id="lista-impuestos">{catImpuestos.map(i => <option key={i.idimpuestos} value={i.impuesto} />)}</datalist>
+
                         <input type="number" disabled={esVisor} min="0.01" step="any" value={fila.cantidad} onChange={(e) => actualizarFila(index, 'cantidad', parseFloat(e.target.value) || 0)} style={inputStyle} />
                         <input type="number" disabled={esVisor} min="0" step="0.01" value={fila.precioUnitario} onChange={(e) => actualizarFila(index, 'precioUnitario', parseFloat(e.target.value) || 0)} style={inputStyle} />
                         <div style={{ padding: '10px 12px', backgroundColor: theme.bgApp, border: `1px solid ${theme.border}`, borderRadius: '6px', textAlign: 'right', fontSize: '14px', fontWeight: '600', color: theme.textMain }}>{(fila.cantidad * fila.precioUnitario).toFixed(2)}</div>
@@ -467,7 +561,6 @@ function Cotizaciones() {
                       </div>
                     )}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      {/* AMBOS ROLES PUEDEN SUBIR DOCUMENTOS DE APOYO */}
                       <div><label style={{...labelStyle, color: theme.primary}}>📄 Adjuntar Nuevo Documento (PDF)</label><input type="file" accept="application/pdf" onChange={(e) => setArchivoPdf(e.target.files[0] || null)} style={{ ...inputStyle, padding: '4px', cursor: 'pointer' }} /></div>
                       <div><label style={labelStyle}>Nombre del Documento</label><input type="text" placeholder="Ej: Proforma final firmada o Evidencia" value={archivoDesc} onChange={(e) => setArchivoDesc(e.target.value)} style={inputStyle} /></div>
                       {archivoPdf && (
@@ -485,7 +578,6 @@ function Cotizaciones() {
                         ))}
                       </div>
                     )}
-                    {/* AMBOS ROLES PUEDEN COMENTAR */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                       <textarea value={comentarioTexto} onChange={(e) => setComentarioTexto(e.target.value)} rows="3" placeholder="Redacta una nueva nota o pregunta aquí..." style={{ ...inputStyle, resize: 'none' }} />
                       <button type="button" onClick={agregarComentarioALista} style={{ padding: '10px 16px', backgroundColor: theme.bgApp, color: theme.primary, border: `1px solid ${theme.border}`, borderRadius: '6px', cursor: 'pointer', fontWeight: '700', fontSize: '13px', alignSelf: 'flex-start' }}>+ Encolar Comentario</button>
