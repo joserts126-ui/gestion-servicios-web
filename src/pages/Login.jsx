@@ -27,18 +27,23 @@ function Login() {
 
     if (data && data.length > 0) {
       const usuarioLogueado = data[0]
+      const rolNormalizado = (usuarioLogueado.rol || 'ADMIN').toUpperCase()
       
-      // NUEVO: Guardamos la "credencial" en la memoria del navegador
       localStorage.setItem('usuarioApp', JSON.stringify({
         idusuario: usuarioLogueado.idusuario,
-        nombre: usuarioLogueado.nombre, // <-- Minúscula corregida
-        rol: usuarioLogueado.rol || 'ADMIN'
+        nombre: usuarioLogueado.nombre, 
+        rol: rolNormalizado
       }))
 
-      // Minúscula corregida aquí también
       alert('¡Bienvenido, ' + usuarioLogueado.nombre + '!') 
       
-      navigate('/dashboard')
+      // NUEVO: Redirección inteligente de acuerdo al rol
+      if (rolNormalizado === 'ALMACENERO') {
+        navigate('/inventario')
+      } else {
+        navigate('/dashboard')
+      }
+      
     } else {
       setMensajeError('Correo o contraseña incorrectos.')
     }
