@@ -2,10 +2,9 @@ import React, { useState } from 'react';
 import PanelAgrupacion from './PanelAgrupacion';
 import MatrizComparativa from './MatrizComparativa';
 import { exportarExcelMatriz } from '../utils/exportadorExcel';
-import { useEvaluacion } from '../hooks/useEvaluacion'; // Asegúrate de que la ruta coincida
-import '../styles/centroEvaluacion.css'; // <-- NUEVO: Importamos los estilos limpios
+import { useEvaluacion } from '../hooks/useEvaluacion'; 
+import '../styles/centroEvaluacion.css'; 
 
-// NUEVO: Agregamos rolUsuario a los props
 function CentroEvaluacion({ servicio, rolUsuario, onClose, onActualizado }) {
   const {
     cargando, categoriasHomologacion, nuevaCategoria, setNuevaCategoria, itemsSeleccionados, itemsCotizaciones,
@@ -14,10 +13,7 @@ function CentroEvaluacion({ servicio, rolUsuario, onClose, onActualizado }) {
     calcularNotaIntegral, guardarMatrizEvaluacion
   } = useEvaluacion(servicio, onActualizado);
 
-  // NUEVO: Calculamos si es visor
   const esVisor = rolUsuario === 'VISOR';
-
-  // Si es visor, lo mandamos directo a la pestaña de evaluar (Matriz) para que no vea la pantalla de agrupación
   const [pestanaHomologacion, setPestañaHomologacion] = useState(esVisor ? 'evaluar' : 'agrupar');
 
   const handleImprimir = () => window.print();
@@ -32,8 +28,6 @@ function CentroEvaluacion({ servicio, rolUsuario, onClose, onActualizado }) {
   }
   
   const itemsPendientes = itemsCotizaciones.filter(i => !i.idcategoria);
-  
-  // Filtro que agregamos previamente
   const cotizacionesParticipantes = (servicio.cotizaciones || []).filter(
     cot => cot.estado !== 'Rechazada' && cot.estado !== 'De Baja'
   );
@@ -49,15 +43,15 @@ function CentroEvaluacion({ servicio, rolUsuario, onClose, onActualizado }) {
 
   return (
     <div className="ce-modal-overlay">
-      <div className="ce-modal-cuerpo">
+      {/* Contenedor Maestro: Bloqueamos la altura al 95% de la pantalla para evitar que se desborde */}
+      <div className="ce-modal-cuerpo" style={{ display: 'flex', flexDirection: 'column', maxHeight: '95vh', overflow: 'hidden' }}>
         
-        {/* CABECERA (Oculta al imprimir) */}
-        <div className="ce-header no-print">
+        {/* CABECERA: Se mantiene fija arriba */}
+        <div className="ce-header no-print" style={{ flexShrink: 0 }}>
           <div>
             <h2 className="ce-title">⚖️ Centro de Homologación y Evaluación</h2>
             <p className="ce-subtitle">Servicio #{servicio.idservicio} - {servicio.servicio}</p>
             <div className="ce-tabs-container">
-              {/* Ocultamos la pestaña de Agrupar si es VISOR, porque ellos no deben armar la matriz */}
               {!esVisor && (
                 <button 
                   className={`ce-btn-tab ${pestanaHomologacion === 'agrupar' ? 'active' : ''}`}
@@ -80,14 +74,16 @@ function CentroEvaluacion({ servicio, rolUsuario, onClose, onActualizado }) {
 
         {/* PESTAÑA 1: AGRUPACIÓN */}
         {pestanaHomologacion === 'agrupar' && !esVisor && (
-          <PanelAgrupacion itemsPendientes={itemsPendientes} itemsSeleccionados={itemsSeleccionados} toggleSeleccionItem={toggleSeleccionItem} categoriasHomologacion={categoriasHomologacion} nuevaCategoria={nuevaCategoria} setNuevaCategoria={setNuevaCategoria} handleCrearCategoria={handleCrearCategoria} handleEliminarCategoria={handleEliminarCategoria} asignarItemsACategoria={asignarItemsACategoria} itemsCotizaciones={itemsCotizaciones} desasignarItem={desasignarItem} />
+          /* Envolvemos el panel en un contenedor flexible para que herede el límite de altura */
+          <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <PanelAgrupacion itemsPendientes={itemsPendientes} itemsSeleccionados={itemsSeleccionados} toggleSeleccionItem={toggleSeleccionItem} categoriasHomologacion={categoriasHomologacion} nuevaCategoria={nuevaCategoria} setNuevaCategoria={setNuevaCategoria} handleCrearCategoria={handleCrearCategoria} handleEliminarCategoria={handleEliminarCategoria} asignarItemsACategoria={asignarItemsACategoria} itemsCotizaciones={itemsCotizaciones} desasignarItem={desasignarItem} />
+          </div>
         )}
         
         {/* PESTAÑA 2: EVALUACIÓN Y MATRIZ */}
         {pestanaHomologacion === 'evaluar' && (
-          <div className="ce-matriz-wrapper">
+          <div className="ce-matriz-wrapper" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
             
-            {/* NUEVO: Pasamos el prop esVisor a la Matriz */}
             <MatrizComparativa 
               servicio={servicio} 
               cotizacionesParticipantes={cotizacionesParticipantes} 
@@ -105,8 +101,7 @@ function CentroEvaluacion({ servicio, rolUsuario, onClose, onActualizado }) {
               esVisor={esVisor} 
             />
             
-            {/* BOTONES INFERIORES (Ocultos al imprimir) */}
-            <div className="ce-footer no-print">
+            <div className="ce-footer no-print" style={{ flexShrink: 0, marginTop: 'auto' }}>
               <div className="ce-action-buttons">
                 <button onClick={handleImprimir} className="ce-btn-action ce-btn-print">
                   🖨️ Imprimir / Guardar PDF
@@ -115,7 +110,6 @@ function CentroEvaluacion({ servicio, rolUsuario, onClose, onActualizado }) {
                   📊 Descargar Excel
                 </button>
               </div>
-              {/* Ocultamos el botón de guardar evaluación si es Visor */}
               {!esVisor && (
                 <button 
                   onClick={guardarMatrizEvaluacion} 

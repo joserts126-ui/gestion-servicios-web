@@ -5,9 +5,19 @@ export default function PanelAgrupacion({ itemsPendientes, itemsSeleccionados, t
   const inputStyle = { width: '100%', padding: '10px 12px', borderRadius: '6px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg, color: theme.textMain, fontSize: '14px', outline: 'none', boxSizing: 'border-box' };
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', flex: 1, overflow: 'hidden' }}>
-      <div style={{ borderRight: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', backgroundColor: '#F8FAFC' }}>
-        <div style={{ padding: '20px', borderBottom: `1px solid ${theme.border}`, backgroundColor: 'white' }}><h3 style={{ margin: 0, fontSize: '16px', color: theme.textMain }}>Ítems sin Clasificar ({itemsPendientes.length})</h3></div>
+    // CONTENEDOR PRINCIPAL: Le agregamos minHeight: 0 para que no se desborde del padre
+    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', flex: 1, overflow: 'hidden', minHeight: 0 }}>
+      
+      {/* ========================================================= */}
+      {/* COLUMNA IZQUIERDA: ÍTEMS SIN CLASIFICAR                   */}
+      {/* ========================================================= */}
+      {/* Le agregamos minHeight: 0 y overflow: 'hidden' para forzar el scroll interno */}
+      <div style={{ borderRight: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', backgroundColor: '#F8FAFC', minHeight: 0, overflow: 'hidden' }}>
+        <div style={{ padding: '20px', borderBottom: `1px solid ${theme.border}`, backgroundColor: 'white' }}>
+          <h3 style={{ margin: 0, fontSize: '16px', color: theme.textMain }}>Ítems sin Clasificar ({itemsPendientes.length})</h3>
+        </div>
+        
+        {/* Aquí nace el scroll vertical independiente */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
           {itemsPendientes.length === 0 ? <div style={{ textAlign: 'center', padding: '40px', color: theme.textMuted }}>¡Todos clasificados! Ve al Paso 2. 🎉</div> : (
             itemsPendientes.map(item => (
@@ -23,14 +33,22 @@ export default function PanelAgrupacion({ itemsPendientes, itemsSeleccionados, t
           )}
         </div>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: 'white' }}>
+
+      {/* ========================================================= */}
+      {/* COLUMNA DERECHA: TUS CANASTAS                             */}
+      {/* ========================================================= */}
+      {/* Le agregamos minHeight: 0 y overflow: 'hidden' para forzar el scroll interno */}
+      <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: 'white', minHeight: 0, overflow: 'hidden' }}>
         <div style={{ padding: '20px', borderBottom: `1px solid ${theme.border}`, backgroundColor: '#F1F5F9' }}>
           <h3 style={{ margin: '0 0 10px 0', fontSize: '16px', color: theme.textMain }}>Tus Canastas</h3>
           <div style={{ display: 'flex', gap: '10px' }}>
             <input type="text" value={nuevaCategoria} onChange={(e)=>setNuevaCategoria(e.target.value)} placeholder="Ej: Mantenimiento" style={{...inputStyle, flex: 1}} />
-            <button onClick={handleCrearCategoria} style={{ padding: '10px 15px', backgroundColor: theme.primary, color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' }}>Crear</button>
+            {/* flexShrink: 0 para evitar que el botón se aplaste */}
+            <button onClick={handleCrearCategoria} style={{ padding: '10px 15px', backgroundColor: theme.primary, color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', cursor: 'pointer', flexShrink: 0 }}>Crear</button>
           </div>
         </div>
+        
+        {/* Aquí nace el segundo scroll vertical independiente */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
           {categoriasHomologacion.map(cat => {
             const itemsEnCanasta = itemsCotizaciones.filter(i => i.idcategoria === cat.idcategoria)
